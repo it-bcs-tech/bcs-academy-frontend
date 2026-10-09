@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import { enhance } from '$app/forms';
 	import type { PageData, ActionData } from './$types';
 	import { formatEmbedUrl, detectEmbedPlatform } from '$lib/utils/embed';
@@ -16,6 +17,50 @@
 		durationText: '15 Menit',
 		contentUrl: ''
 	});
+
+	// Fullscreen State & Handlers
+	let playerViewerRef = $state<HTMLElement | null>(null);
+	let isFullscreen = $state(false);
+
+	function toggleFullscreen() {
+		if (!playerViewerRef) return;
+		if (!document.fullscreenElement) {
+			playerViewerRef.requestFullscreen().catch((err) => {
+				console.error('Fullscreen request error:', err);
+			});
+		} else {
+			document.exitFullscreen().catch((err) => {
+				console.error('Fullscreen exit error:', err);
+			});
+		}
+	}
+
+	onMount(() => {
+		const handleFsChange = () => {
+			isFullscreen = Boolean(document.fullscreenElement);
+		};
+		document.addEventListener('fullscreenchange', handleFsChange);
+		return () => {
+			document.removeEventListener('fullscreenchange', handleFsChange);
+		};
+	});
+
+	function isModulePdf(mod: any) {
+		if (!mod) return false;
+		return (
+			mod.type === 'DOCUMENT' ||
+			mod.type === 'PDF' ||
+			Boolean(
+				mod.contentUrl &&
+				(mod.contentUrl.includes('.pdf') ||
+				 mod.contentUrl.includes('drive.google.com') ||
+				 mod.contentUrl.includes('docs.google.com')) &&
+				mod.type !== 'VIDEO'
+			)
+		);
+	}
+
+	let isCurrentModulePdf = $derived(isModulePdf(currentModule));
 
 	// State Jawaban & Evaluasi
 	let preAnswers = $state<Record<number, string>>({});
@@ -350,13 +395,22 @@
 			<div class="lg:col-span-2 space-y-4">
 				<div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl overflow-hidden shadow-xl flex flex-col">
 					<!-- Player Header & Media Viewer -->
-					<div class="bg-slate-900 text-white p-5 md:p-6 space-y-4">
+					<div bind:this={playerViewerRef} class="bg-slate-900 text-white p-5 md:p-6 space-y-4 {isFullscreen ? 'fixed inset-0 z-50 p-6 flex flex-col justify-between rounded-none overflow-y-auto bg-slate-950' : ''}">
 						<!-- Bar Info Modul Aktif -->
 						<div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 pb-3">
 							<div class="flex items-center gap-2">
-								<span class="px-2.5 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
-									{currentModule.type}
-								</span>
+								{#if isCurrentModulePdf}
+									<span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider bg-rose-500/20 text-rose-300 border border-rose-500/30">
+										<span class="material-symbols-outlined text-xs">picture_as_pdf</span>
+										<span>PDF</span>
+									</span>
+								{:else}
+									<span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+										<span class="material-symbols-outlined text-xs">smart_display</span>
+										<span>VIDEO</span>
+									</span>
+								{/if}
+
 								{#if currentModule.contentUrl}
 									{@const platform = detectEmbedPlatform(currentModule.contentUrl)}
 									<span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md text-[10px] font-bold bg-slate-800 text-slate-300 border border-slate-700">
@@ -367,27 +421,28 @@
 							</div>
 
 							<div class="flex items-center gap-3">
-								<span class="text-xs text-slate-400 font-medium">Durasi: {currentModule.durationText || '15 Menit'}</span>
-								{#if currentModule.contentUrl}
-									<a
-										href={currentModule.contentUrl}
-										target="_blank"
-										rel="noreferrer"
-										class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-indigo-600/30 hover:bg-indigo-600/50 text-indigo-300 hover:text-white text-[11px] font-bold transition-all"
-										title="Buka media di tab browser baru"
-									>
-										<span>Buka di Tab Baru</span>
-										<span class="material-symbols-outlined text-xs">open_in_new</span>
-									</a>
+								{#if !isCurrentModulePdf}
+									<span class="text-xs text-slate-400 font-medium">Durasi: {currentModule.durationText || '15 Menit'}</span>
 								{/if}
+
+								<!-- Tombol Fullscreen (Layar Penuh) -->
+								<button
+									type="button"
+									onclick={toggleFullscreen}
+									class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white text-xs font-bold transition-all border border-slate-700 cursor-pointer shadow-xs"
+									title={isFullscreen ? 'Keluar Layar Penuh (Esc)' : 'Tampilkan Layar Penuh'}
+								>
+									<span class="material-symbols-outlined text-sm">{isFullscreen ? 'fullscreen_exit' : 'fullscreen'}</span>
+									<span>{isFullscreen ? 'Keluar Fullscreen' : 'Layar Penuh'}</span>
+								</button>
 							</div>
 						</div>
 
 						<!-- Media Canvas: Iframe / Document Viewer / Video Box -->
 						{#if currentModule.contentUrl}
 							{@const embedSrc = formatEmbedUrl(currentModule.contentUrl)}
-							<div class="space-y-4">
-								<div class="w-full h-80 sm:h-96 md:h-[460px] rounded-2xl overflow-hidden bg-black/60 border border-slate-800 shadow-inner">
+							<div class="space-y-4 {isFullscreen ? 'flex-1 flex flex-col' : ''}">
+								<div class="w-full {isFullscreen ? 'flex-1 min-h-[75vh]' : 'h-80 sm:h-96 md:h-[460px]'} rounded-2xl overflow-hidden bg-black/60 border border-slate-800 shadow-inner">
 									<iframe
 										src={embedSrc}
 										title={currentModule.title}
@@ -525,7 +580,11 @@
 							</div>
 							<div class="flex-1 min-w-0">
 								<p class="text-xs truncate">{mod.title}</p>
-								<p class="text-[10px] opacity-70 mt-0.5">{mod.durationText} • {mod.type}</p>
+								{#if isModulePdf(mod)}
+									<p class="text-[10px] {isSelected ? 'text-white/80' : 'text-rose-500 dark:text-rose-400 font-semibold'} mt-0.5">Dokumen PDF</p>
+								{:else}
+									<p class="text-[10px] opacity-70 mt-0.5">{mod.durationText} • VIDEO</p>
+								{/if}
 							</div>
 							<span class="material-symbols-outlined text-base {isSelected ? 'text-white' : 'text-slate-300'}">
 								{isSelected ? 'play_arrow' : 'radio_button_unchecked'}
