@@ -1,0 +1,73 @@
+name: Deploy BCS Academy to Biznet Server
+
+on:
+  push:
+    branches:
+      - master
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: it-bcs-tech/bcs-academy-frontend
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: 1. Checkout repository
+        uses: actions/checkout@v4
+
+      - name: 2. Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 3. Extract metadata for Docker
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: type=raw,value=latest
+
+      - name: 4. Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+
+      - name: 5. Execute Deployment on Biznet Server via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          script: |
+            cd ~/erp-bcs/
+            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+            
+            # Cek dan tambahkan definisi service academy_frontend jika belum ada di docker-compose.yml server
+            if ! grep -q "academy_frontend:" docker-compose.yml; then
+              echo "Menambahkan service academy_frontend ke docker-compose.yml di server..."
+              sed -i '/^networks:/i \  # 9. BCS Academy Employee Portal (SvelteKit)\n  academy_frontend:\n    image: ghcr.io/it-bcs-tech/bcs-academy-frontend:latest\n    container_name: academy_frontend\n    ports:\n      - "3005:3000"\n    restart: always\n    environment:\n      - NODE_ENV=production\n      - TZ=Asia/Jakarta\n      - ORIGIN=https://academy.bcslabs.tech\n      - DATABASE_URL=postgresql://bcs_admin:sangatrahasia@database:5432/mybcs_db\n    networks:\n      - erp_network\n    depends_on:\n      - database\n' docker-compose.yml
+            fi
+
+            echo "=== DISK USAGE SEBELUM CLEANUP ==="
+            df -h /
+            
+            docker system prune -af --volumes=false
+            
+            echo "=== PULL DOCKER IMAGE ACADEMY ==="
+            docker compose pull academy_frontend
+            
+            echo "=== RECREATE CONTAINER ACADEMY ==="
+            docker compose up -d --force-recreate --no-deps academy_frontend
+            
+            echo "=== STATUS CONTAINER ACADEMY ==="
+            docker compose ps academy_frontend
