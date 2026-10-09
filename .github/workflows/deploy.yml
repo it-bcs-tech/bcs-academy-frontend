@@ -56,7 +56,7 @@ jobs:
             # Cek dan tambahkan definisi service academy_frontend jika belum ada di docker-compose.yml server
             if ! grep -q "academy_frontend:" docker-compose.yml; then
               echo "Menambahkan service academy_frontend ke docker-compose.yml di server..."
-              sed -i '/^networks:/i \  # 9. BCS Academy Employee Portal (SvelteKit)\n  academy_frontend:\n    image: ghcr.io/it-bcs-tech/bcs-academy-frontend:latest\n    container_name: academy_frontend\n    ports:\n      - "3005:3000"\n    restart: always\n    environment:\n      - NODE_ENV=production\n      - TZ=Asia/Jakarta\n      - ORIGIN=https://academy.bcslabs.tech\n      - DATABASE_URL=postgresql://bcs_admin:sangatrahasia@database:5432/mybcs_db\n    networks:\n      - erp_network\n    depends_on:\n      - database\n' docker-compose.yml
+              sed -i '/^networks:/i \  # 9. BCS Academy Employee Portal (SvelteKit)\n  academy_frontend:\n    image: ghcr.io/it-bcs-tech/bcs-academy-frontend:latest\n    container_name: academy_frontend\n    ports:\n      - "3005:3000"\n    restart: always\n    environment:\n      - NODE_ENV=production\n      - TZ=Asia/Jakarta\n      - ORIGIN=http://academy.bcslabs.tech\n      - DATABASE_URL=postgresql://bcs_admin:sangatrahasia@database:5432/mybcs_db\n    networks:\n      - erp_network\n    depends_on:\n      - database\n' docker-compose.yml
             fi
 
             echo "=== DISK USAGE SEBELUM CLEANUP ==="

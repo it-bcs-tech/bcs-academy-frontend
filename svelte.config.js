@@ -5,7 +5,11 @@ import { vitePreprocess } from '@sveltejs/vite-plugin-svelte';
 const config = {
 	preprocess: vitePreprocess(),
 	kit: {
-		adapter: adapter()
+		adapter: adapter(),
+		csrf: {
+			checkOrigin: false,
+			trustedOrigins: ['http://academy.bcslabs.tech', 'https://academy.bcslabs.tech']
+		}
 	}
 };
 
