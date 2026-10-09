@@ -7,6 +7,7 @@ export interface EmployeeUser {
 	id: number;
 	payrollId: string;
 	name: string;
+	email?: string;
 	division: string;
 	divisionCode: string;
 	title: string;

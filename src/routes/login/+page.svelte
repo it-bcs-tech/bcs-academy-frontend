@@ -5,13 +5,10 @@
 
 	let { form }: { form: ActionData } = $props();
 
-	let quickPayrollId = $state('');
-	let quickPin = $state('123456');
-
-	function fillDemo(id: string) {
-		quickPayrollId = id;
-		quickPin = '123456';
-	}
+	let email = $state('');
+	let password = $state('');
+	let showPassword = $state(false);
+	let isSubmitting = $state(false);
 </script>
 
 <svelte:head>
@@ -45,7 +42,7 @@
 			</div>
 			<h1 class="text-2xl font-black text-slate-900 dark:text-white tracking-tight">BCS Academy</h1>
 			<p class="text-xs text-slate-500 dark:text-slate-400 font-medium max-w-xs mx-auto">
-				Portal Pelatihan & Sertifikasi Mandiri Karyawan PT Buana Centra Swakarsa
+				Portal Pembelajaran & Sertifikasi Mandiri Karyawan PT Buana Centra Swakarsa
 			</p>
 		</div>
 
@@ -57,81 +54,94 @@
 		{/if}
 
 		<!-- Login Form -->
-		<form method="POST" action="?/login" use:enhance class="space-y-4">
+		<form 
+			method="POST" 
+			action="?/login" 
+			use:enhance={() => {
+				isSubmitting = true;
+				return async ({ update }) => {
+					isSubmitting = false;
+					await update();
+				};
+			}} 
+			class="space-y-4"
+		>
+			<!-- Email Input -->
 			<div>
-				<label for="payrollId" class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">
-					NIK / Payroll ID Karyawan
+				<label for="email" class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">
+					Email Akun Presensi
 				</label>
 				<div class="relative">
-					<span class="material-symbols-outlined absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500 text-lg">badge</span>
+					<span class="material-symbols-outlined absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500 text-lg">mail</span>
 					<input 
-						id="payrollId"
-						type="text" 
-						name="payrollId" 
-						bind:value={quickPayrollId}
+						id="email"
+						type="email" 
+						name="email" 
+						bind:value={email}
 						required 
-						placeholder="Contoh: EMP-0042 atau NIK" 
-						class="w-full bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 focus:border-indigo-500 rounded-2xl py-3 pl-11 pr-4 text-sm text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all font-medium uppercase"
+						autocomplete="email"
+						placeholder="nama.karyawan@bcs-logistics.co.id" 
+						class="w-full bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 focus:border-indigo-500 rounded-2xl py-3 pl-11 pr-4 text-sm text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all font-medium"
 					/>
 				</div>
 			</div>
 
+			<!-- Password Input -->
 			<div>
-				<label for="pin" class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">
-					PIN Keamanan (6 Digit)
+				<label for="password" class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">
+					Kata Sandi
 				</label>
 				<div class="relative">
 					<span class="material-symbols-outlined absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500 text-lg">lock</span>
 					<input 
-						id="pin"
-						type="password" 
-						name="pin" 
-						bind:value={quickPin}
+						id="password"
+						type={showPassword ? 'text' : 'password'} 
+						name="password" 
+						bind:value={password}
 						required 
-						maxlength="6"
-						placeholder="Default: 123456" 
-						class="w-full bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 focus:border-indigo-500 rounded-2xl py-3 pl-11 pr-4 text-sm text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all font-medium tracking-widest"
+						autocomplete="current-password"
+						placeholder="Masukkan kata sandi Presensi" 
+						class="w-full bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 focus:border-indigo-500 rounded-2xl py-3 pl-11 pr-11 text-sm text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all font-medium"
 					/>
+					<button
+						type="button"
+						onclick={() => (showPassword = !showPassword)}
+						class="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300 focus:outline-none cursor-pointer"
+						tabindex="-1"
+						title={showPassword ? 'Sembunyikan sandi' : 'Tampilkan sandi'}
+					>
+						<span class="material-symbols-outlined text-lg block">
+							{showPassword ? 'visibility_off' : 'visibility'}
+						</span>
+					</button>
 				</div>
 			</div>
 
+			<!-- Submit Button -->
 			<button 
 				type="submit"
-				class="w-full py-3.5 px-4 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white rounded-2xl font-black text-sm shadow-lg shadow-indigo-600/30 hover:shadow-indigo-600/50 transition-all cursor-pointer active:scale-98 flex items-center justify-center gap-2 mt-2"
+				disabled={isSubmitting}
+				class="w-full py-3.5 px-4 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 disabled:opacity-70 disabled:cursor-not-allowed text-white rounded-2xl font-black text-sm shadow-lg shadow-indigo-600/30 hover:shadow-indigo-600/50 transition-all cursor-pointer active:scale-98 flex items-center justify-center gap-2 mt-2"
 			>
-				<span>Masuk ke Academy</span>
-				<span class="material-symbols-outlined text-lg">arrow_forward</span>
+				{#if isSubmitting}
+					<span class="material-symbols-outlined text-lg animate-spin">progress_activity</span>
+					<span>Memverifikasi Akun...</span>
+				{:else}
+					<span>Masuk ke Academy</span>
+					<span class="material-symbols-outlined text-lg">arrow_forward</span>
+				{/if}
 			</button>
 		</form>
 
-		<!-- Quick Demo Roles Switcher -->
-		<div class="pt-4 border-t border-slate-100 dark:border-slate-800 space-y-2.5">
-			<p class="text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 text-center">Akses Cepat Pengujian:</p>
-			<div class="grid grid-cols-3 gap-2">
-				<button 
-					type="button" 
-					onclick={() => fillDemo('EMP-0042')}
-					class="p-2 rounded-xl bg-slate-50 hover:bg-slate-100 dark:bg-slate-800/80 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700/60 text-center text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white transition-all cursor-pointer"
-				>
-					<p class="text-[10px] font-bold">Driver Truk</p>
-					<p class="text-[9px] text-indigo-600 dark:text-indigo-400 font-mono">EMP-0042</p>
-				</button>
-				<button 
-					type="button" 
-					onclick={() => fillDemo('EMP-0018')}
-					class="p-2 rounded-xl bg-slate-50 hover:bg-slate-100 dark:bg-slate-800/80 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700/60 text-center text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white transition-all cursor-pointer"
-				>
-					<p class="text-[10px] font-bold">Mekanik</p>
-					<p class="text-[9px] text-indigo-600 dark:text-indigo-400 font-mono">EMP-0018</p>
-				</button>
-				<button 
-					type="button" 
-					onclick={() => fillDemo('EMP-0099')}
-					class="p-2 rounded-xl bg-slate-50 hover:bg-slate-100 dark:bg-slate-800/80 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700/60 text-center text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white transition-all cursor-pointer"
-				>
-					<p class="text-[10px] font-bold">Officer K3</p>
-					<p class="text-[9px] text-indigo-600 dark:text-indigo-400 font-mono">EMP-0099</p>
-				</button>
+		<!-- Info Bantuan Kredensial Presensi -->
+		<div class="pt-4 border-t border-slate-100 dark:border-slate-800 space-y-2">
+			<div class="p-3.5 rounded-2xl bg-indigo-50/70 dark:bg-indigo-950/30 border border-indigo-100 dark:border-indigo-800/50 flex items-start gap-2.5">
+				<span class="material-symbols-outlined text-indigo-500 dark:text-indigo-400 text-base mt-0.5 shrink-0">info</span>
+				<div class="text-[11px] leading-relaxed text-slate-600 dark:text-slate-300">
+					<p class="font-bold text-slate-800 dark:text-slate-100">Kredensial Terintegrasi</p>
+					<p class="mt-0.5">Gunakan <strong>Email</strong> dan <strong>Kata Sandi</strong> yang sama dengan aplikasi Presensi Mobile BCS Anda.</p>
+					<p class="text-[10px] text-slate-400 dark:text-slate-500 mt-1">Jika belum memiliki akun atau lupa kata sandi, silakan hubungi bagian HC / TnD.</p>
+				</div>
 			</div>
 		</div>
 	</div>
