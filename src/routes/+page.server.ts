@@ -1,7 +1,7 @@
 import { redirect } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
 import sql from '$lib/server/db';
-import { COURSES_CATALOG, MOCK_CERTIFICATES } from '$lib/server/mockData';
+import { COURSES_CATALOG } from '$lib/server/mockData';
 import type { Course, Certificate } from '$lib/types/academy';
 
 export const load: PageServerLoad = async ({ parent }) => {
@@ -11,7 +11,8 @@ export const load: PageServerLoad = async ({ parent }) => {
 	}
 
 	let catalog: Course[] = COURSES_CATALOG;
-	let userCerts: Certificate[] = MOCK_CERTIFICATES;
+	let userCerts: Certificate[] = [];
+	let enrollments: any[] = [];
 
 	try {
 		// 1. Ambil catalog aktif dari DB
@@ -57,10 +58,10 @@ export const load: PageServerLoad = async ({ parent }) => {
 			}));
 		}
 
-		// 2. Ambil sertifikat resmi milik user
+		// 2. Ambil sertifikat resmi milik user dari PostgreSQL
 		const certRows = await sql`
 			SELECT * FROM hris.lms_certificates
-			WHERE UPPER(payroll_id) = ${user.payrollId.toUpperCase()}
+			WHERE UPPER(TRIM(payroll_id)) = ${user.payrollId.toUpperCase().trim()}
 			ORDER BY issued_at DESC;
 		`;
 
@@ -85,12 +86,12 @@ export const load: PageServerLoad = async ({ parent }) => {
 			       c.duration_hours, c.modules_count, c.instructor, c.description, c.thumbnail_url
 			FROM hris.lms_enrollments e
 			JOIN hris.lms_courses c ON c.id = e.course_id
-			WHERE UPPER(e.payroll_id) = ${user.payrollId.toUpperCase()}
+			WHERE UPPER(TRIM(e.payroll_id)) = ${user.payrollId.toUpperCase().trim()}
 			ORDER BY e.is_tna_gap DESC, e.enrolled_at DESC;
 		`;
 
 		if (enrollRows && enrollRows.length > 0) {
-			const dbEnrollments = enrollRows.map((r: any) => {
+			enrollments = enrollRows.map((r: any) => {
 				const foundCourse = catalog.find((c) => c.id === r.course_id) || {
 					id: r.course_id,
 					title: r.course_title,
@@ -123,37 +124,13 @@ export const load: PageServerLoad = async ({ parent }) => {
 					competencyCode: r.competency_code
 				};
 			});
-
-			return {
-				enrollments: dbEnrollments,
-				catalog,
-				certificates: userCerts
-			};
 		}
 	} catch (e) {
 		console.error('Error loading live DB data for employee dashboard:', e);
 	}
 
-	// Fallback user enrollments
-	const myEnrollments = catalog.slice(0, 3).map((c, idx) => ({
-		courseId: c.id,
-		course: c,
-		status: (idx === 1 ? 'COMPLETED' : 'IN_PROGRESS') as 'COMPLETED' | 'IN_PROGRESS',
-		progressPercent: idx === 1 ? 100 : idx === 0 ? 80 : 25,
-		completedModulesCount: idx === 1 ? c.modulesCount : idx === 0 ? Math.max(1, c.modulesCount - 1) : 1,
-		totalModulesCount: c.modulesCount,
-		enrolledAt: '01 Agt 2026',
-		completedAt: idx === 1 ? '22 Agt 2026' : undefined,
-		deadline: idx === 1 ? undefined : '30 Sep 2026',
-		score: idx === 1 ? 95 : undefined,
-		hasCertificate: idx === 1,
-		certificateNumber: idx === 1 ? userCerts[0]?.certificateNumber || 'CERT-BCS-2026-0889' : undefined,
-		isTnaGap: idx === 0,
-		competencyCode: idx === 0 ? 'E06' : undefined
-	}));
-
 	return {
-		enrollments: myEnrollments,
+		enrollments,
 		catalog,
 		certificates: userCerts
 	};

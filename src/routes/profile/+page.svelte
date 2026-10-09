@@ -118,7 +118,7 @@
 	</div>
 
 	<!-- LOGOUT BUTTON -->
-	<form method="POST" action="/login?/logout" class="pt-2">
+	<form method="POST" action="/logout" class="pt-2">
 		<button 
 			type="submit"
 			class="w-full py-3.5 bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 dark:hover:bg-rose-900/50 border border-rose-200 dark:border-rose-800/60 text-rose-700 dark:text-rose-300 rounded-2xl font-bold text-xs transition-all flex items-center justify-center gap-2 cursor-pointer"

@@ -1,7 +1,6 @@
 import { redirect } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
 import sql from '$lib/server/db';
-import { MOCK_CERTIFICATES } from '$lib/server/mockData';
 import type { Certificate } from '$lib/types/academy';
 
 export const load: PageServerLoad = async ({ parent }) => {
@@ -13,7 +12,7 @@ export const load: PageServerLoad = async ({ parent }) => {
 	try {
 		const certRows = await sql`
 			SELECT * FROM hris.lms_certificates
-			WHERE UPPER(payroll_id) = ${user.payrollId.toUpperCase()}
+			WHERE UPPER(TRIM(payroll_id)) = ${user.payrollId.toUpperCase().trim()}
 			ORDER BY issued_at DESC;
 		`;
 
@@ -40,6 +39,6 @@ export const load: PageServerLoad = async ({ parent }) => {
 	}
 
 	return {
-		certificates: MOCK_CERTIFICATES
+		certificates: []
 	};
 };

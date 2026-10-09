@@ -40,7 +40,15 @@ export const actions = {
 	},
 
 	logout: async ({ cookies }) => {
-		cookies.delete('bcs_academy_token', { path: '/' });
+		cookies.delete('bcs_academy_token', { path: '/', secure: false });
+		cookies.set('bcs_academy_token', '', {
+			path: '/',
+			maxAge: 0,
+			expires: new Date(0),
+			secure: false,
+			httpOnly: true,
+			sameSite: 'lax'
+		});
 		throw redirect(303, '/login');
 	}
 } satisfies Actions;

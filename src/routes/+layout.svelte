@@ -76,8 +76,8 @@
 							</div>
 						</a>
 
-						<form method="POST" action="/login?/logout" class="hidden sm:block">
-							<button type="submit" title="Logout" class="w-9 h-9 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-rose-50 dark:hover:bg-rose-950/40 hover:text-rose-600 dark:hover:text-rose-400 text-slate-500 dark:text-slate-400 flex items-center justify-center transition-colors border border-slate-200 dark:border-slate-700/80 cursor-pointer">
+						<form method="POST" action="/logout" class="flex items-center">
+							<button type="submit" title="Logout dari Akun" class="w-9 h-9 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-rose-50 dark:hover:bg-rose-950/40 hover:text-rose-600 dark:hover:text-rose-400 text-slate-500 dark:text-slate-400 flex items-center justify-center transition-colors border border-slate-200 dark:border-slate-700/80 cursor-pointer">
 								<span class="material-symbols-outlined text-lg">logout</span>
 							</button>
 						</form>
