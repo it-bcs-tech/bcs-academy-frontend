@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
 	import type { PageData, ActionData } from './$types';
+	import { formatEmbedUrl, detectEmbedPlatform } from '$lib/utils/embed';
 
 	let { data, form }: { data: PageData; form: ActionData } = $props();
 	const { course, preTestQuestions, postTestQuestions } = data;
@@ -182,8 +183,8 @@
 			<!-- Step 2 -->
 			<button
 				type="button"
-				onclick={() => { if (data.enrollment?.preTestScore !== null || currentStep > 2) currentStep = 2; }}
-				class="flex items-center gap-2 p-2.5 rounded-2xl text-left transition-all {currentStep === 2 ? 'bg-indigo-600 text-white shadow-md font-black' : currentStep > 2 ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/40' : 'text-slate-400 opacity-60'}"
+				onclick={() => (currentStep = 2)}
+				class="flex items-center gap-2 p-2.5 rounded-2xl text-left transition-all cursor-pointer {currentStep === 2 ? 'bg-indigo-600 text-white shadow-md font-black' : currentStep > 2 ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/40' : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white'}"
 			>
 				<span class="material-symbols-outlined text-xl {currentStep > 2 ? 'text-emerald-600 dark:text-emerald-400' : ''}">
 					{currentStep > 2 ? 'check_circle' : 'play_lesson'}
@@ -348,32 +349,127 @@
 			<!-- Canvas Pemutar Video / Dokumen -->
 			<div class="lg:col-span-2 space-y-4">
 				<div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl overflow-hidden shadow-xl flex flex-col">
-					<!-- Player Canvas -->
-					<div class="bg-slate-900 text-white p-6 min-h-[380px] flex flex-col justify-between">
-						<div class="aspect-video w-full bg-slate-950 rounded-2xl border border-slate-800 flex flex-col items-center justify-center p-6 text-center space-y-3 relative overflow-hidden">
-							<div class="w-16 h-16 rounded-3xl bg-indigo-600/20 text-indigo-400 border border-indigo-500/30 flex items-center justify-center shadow-lg shadow-indigo-500/20 animate-pulse">
-								<span class="material-symbols-outlined text-3xl">play_circle</span>
+					<!-- Player Header & Media Viewer -->
+					<div class="bg-slate-900 text-white p-5 md:p-6 space-y-4">
+						<!-- Bar Info Modul Aktif -->
+						<div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 pb-3">
+							<div class="flex items-center gap-2">
+								<span class="px-2.5 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+									{currentModule.type}
+								</span>
+								{#if currentModule.contentUrl}
+									{@const platform = detectEmbedPlatform(currentModule.contentUrl)}
+									<span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md text-[10px] font-bold bg-slate-800 text-slate-300 border border-slate-700">
+										<span class="material-symbols-outlined text-xs">{platform.icon}</span>
+										<span>{platform.name}</span>
+									</span>
+								{/if}
 							</div>
-							<h4 class="font-black text-sm md:text-base text-white max-w-md">
-								{currentModule.title}
-							</h4>
-							<p class="text-xs text-slate-400">
-								Bab {activeModuleIndex + 1} dari {course.modules.length} • Durasi: {currentModule.durationText} • Format: {currentModule.type}
-							</p>
+
+							<div class="flex items-center gap-3">
+								<span class="text-xs text-slate-400 font-medium">Durasi: {currentModule.durationText || '15 Menit'}</span>
+								{#if currentModule.contentUrl}
+									<a
+										href={currentModule.contentUrl}
+										target="_blank"
+										rel="noreferrer"
+										class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-indigo-600/30 hover:bg-indigo-600/50 text-indigo-300 hover:text-white text-[11px] font-bold transition-all"
+										title="Buka media di tab browser baru"
+									>
+										<span>Buka di Tab Baru</span>
+										<span class="material-symbols-outlined text-xs">open_in_new</span>
+									</a>
+								{/if}
+							</div>
 						</div>
 
-						<!-- Controls Bawah Video -->
-						<div class="mt-4 pt-4 border-t border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-							<span class="text-xs text-slate-400">Trainer: {course.instructor}</span>
+						<!-- Media Canvas: Iframe / Document Viewer / Video Box -->
+						{#if currentModule.contentUrl}
+							{@const embedSrc = formatEmbedUrl(currentModule.contentUrl)}
+							<div class="space-y-4">
+								<div class="w-full h-80 sm:h-96 md:h-[460px] rounded-2xl overflow-hidden bg-black/60 border border-slate-800 shadow-inner">
+									<iframe
+										src={embedSrc}
+										title={currentModule.title}
+										class="w-full h-full border-0"
+										allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+										allowfullscreen
+									></iframe>
+								</div>
+
+								{#if currentModule.contentBody}
+									<div class="p-4 rounded-2xl bg-slate-800/80 border border-slate-700/80 text-xs text-slate-200 leading-relaxed whitespace-pre-wrap space-y-1.5">
+										<div class="flex items-center gap-1.5 text-indigo-400 font-bold">
+											<span class="material-symbols-outlined text-sm">notes</span>
+											<span>Catatan & Ringkasan Materi</span>
+										</div>
+										<p class="text-slate-300 pl-5">{currentModule.contentBody}</p>
+									</div>
+								{/if}
+							</div>
+						{:else if currentModule.type === 'DOCUMENT'}
+							<div class="p-6 md:p-8 rounded-2xl bg-slate-800/60 border border-slate-700/80 space-y-4">
+								<div class="flex items-center gap-2 text-indigo-400 font-bold text-xs uppercase tracking-wider">
+									<span class="material-symbols-outlined text-base">description</span>
+									<span>Dokumen Standar Operasional Prosedur (SOP)</span>
+								</div>
+								<div class="p-5 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-200 leading-relaxed whitespace-pre-wrap font-sans">
+									{currentModule.contentBody || 'Dokumen materi dan panduan standar operasional.'}
+								</div>
+							</div>
+						{:else if currentModule.type === 'QUIZ'}
+							<div class="p-8 rounded-2xl bg-gradient-to-br from-amber-950/40 to-slate-900 border border-amber-800/50 space-y-4 text-center">
+								<div class="w-16 h-16 mx-auto rounded-3xl bg-amber-500/20 text-amber-400 border border-amber-500/30 flex items-center justify-center shadow-lg shadow-amber-500/20">
+									<span class="material-symbols-outlined text-3xl">quiz</span>
+								</div>
+								<div>
+									<h4 class="font-black text-base text-white">{currentModule.title}</h4>
+									<p class="text-xs text-slate-300 max-w-md mx-auto mt-1 leading-relaxed">
+										{currentModule.contentBody || 'Modul ini merupakan bagian evaluasi kelulusan. Selesaikan materi modul untuk memulai ujian Post-Test.'}
+									</p>
+								</div>
+								<button
+									type="button"
+									onclick={() => (currentStep = 3)}
+									class="px-5 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold transition-all shadow-md cursor-pointer inline-flex items-center gap-1.5"
+								>
+									<span>Lanjut ke Post-Test Kelulusan</span>
+									<span class="material-symbols-outlined text-xs">arrow_forward</span>
+								</button>
+							</div>
+						{:else}
+							<div class="w-full h-80 rounded-2xl bg-slate-950 border border-slate-800 flex flex-col items-center justify-center p-6 text-center space-y-3 relative overflow-hidden">
+								<div class="w-16 h-16 rounded-3xl bg-indigo-600/20 text-indigo-400 border border-indigo-500/30 flex items-center justify-center shadow-lg shadow-indigo-500/20 animate-pulse">
+									<span class="material-symbols-outlined text-3xl">play_circle</span>
+								</div>
+								<h4 class="font-black text-sm md:text-base text-white max-w-md">
+									{currentModule.title}
+								</h4>
+								<p class="text-xs text-slate-400">
+									Bab {activeModuleIndex + 1} dari {course.modules.length} • Durasi: {currentModule.durationText} • Format: {currentModule.type}
+								</p>
+								{#if currentModule.contentBody}
+									<p class="text-xs text-slate-300 max-w-md mt-2 whitespace-pre-wrap">{currentModule.contentBody}</p>
+								{/if}
+							</div>
+						{/if}
+
+						<!-- Controls Navigasi Bab & Trainer -->
+						<div class="pt-4 border-t border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+							<div class="flex items-center gap-2 text-xs text-slate-400">
+								<span class="material-symbols-outlined text-sm text-indigo-400">person</span>
+								<span>Instruktur: <strong>{course.instructor}</strong></span>
+							</div>
 
 							<div class="flex items-center gap-2">
 								<button
 									type="button"
 									disabled={activeModuleIndex === 0}
 									onclick={prevModule}
-									class="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 disabled:opacity-40 text-xs font-bold text-white transition-all cursor-pointer"
+									class="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 disabled:opacity-40 text-xs font-bold text-white transition-all cursor-pointer flex items-center gap-1"
 								>
-									&larr; Bab Sebelumnya
+									<span class="material-symbols-outlined text-xs">arrow_back</span>
+									<span>Bab Sebelumnya</span>
 								</button>
 
 								<form
