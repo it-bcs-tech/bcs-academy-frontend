@@ -31,7 +31,9 @@ export interface CourseModule {
 
 export interface QuizQuestion {
 	id: number;
-	moduleId: string;
+	courseId?: string;
+	moduleId?: string;
+	quizType: 'PRE_TEST' | 'POST_TEST';
 	questionText: string;
 	options: { key: string; text: string }[];
 	correctKey: string;
@@ -56,18 +58,25 @@ export interface Course {
 }
 
 export interface Enrollment {
+	id?: number;
 	courseId: string;
-	course: Course;
+	course?: Course;
+	payrollId: string;
+	employeeName?: string;
 	status: 'NOT_STARTED' | 'IN_PROGRESS' | 'COMPLETED';
 	progressPercent: number;
 	completedModulesCount: number;
 	totalModulesCount: number;
+	preTestScore?: number;
+	postTestScore?: number;
 	enrolledAt: string;
 	completedAt?: string;
 	deadline?: string;
 	score?: number;
 	hasCertificate?: boolean;
 	certificateNumber?: string;
+	isTnaGap?: boolean;
+	competencyCode?: string;
 }
 
 export interface Certificate {

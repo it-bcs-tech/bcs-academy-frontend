@@ -1,6 +1,7 @@
 <script lang="ts">
 	import '../app.css';
 	import { page } from '$app/stores';
+	import { theme } from '$lib/theme.svelte';
 
 	let { data, children } = $props();
 	const user = $derived(data.user);
@@ -14,10 +15,10 @@
 	];
 </script>
 
-<div class="min-h-screen bg-slate-950 text-slate-100 flex flex-col justify-between selection:bg-indigo-500 selection:text-white">
+<div class="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-100 flex flex-col justify-between selection:bg-indigo-500 selection:text-white transition-colors duration-150">
 	{#if !isLoginPage}
 		<!-- TOP HEADER (All Devices) -->
-		<header class="bg-slate-900/90 backdrop-blur-md border-b border-slate-800/80 sticky top-0 z-40 px-4 md:px-8 py-3.5 shadow-md">
+		<header class="bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border-b border-slate-200/80 dark:border-slate-800/80 sticky top-0 z-40 px-4 md:px-8 py-3.5 shadow-xs">
 			<div class="max-w-6xl mx-auto flex items-center justify-between">
 				<!-- Brand -->
 				<a href="/" class="flex items-center gap-3 group">
@@ -26,23 +27,23 @@
 					</div>
 					<div>
 						<div class="flex items-center gap-2">
-							<span class="font-extrabold text-base md:text-lg tracking-tight text-white group-hover:text-indigo-400 transition-colors">
+							<span class="font-extrabold text-base md:text-lg tracking-tight text-slate-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
 								BCS Academy
 							</span>
-							<span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 uppercase tracking-widest hidden sm:inline-block">
+							<span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-500/20 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-500/30 uppercase tracking-widest hidden sm:inline-block">
 								e-Learning
 							</span>
 						</div>
-						<p class="text-[11px] text-slate-400 font-medium">PT Buana Centra Swakarsa</p>
+						<p class="text-[11px] text-slate-500 dark:text-slate-400 font-medium">PT Buana Centra Swakarsa</p>
 					</div>
 				</a>
 
 				<!-- Desktop / Tablet Nav Links -->
-				<nav class="hidden md:flex items-center gap-1.5 bg-slate-800/60 p-1 rounded-2xl border border-slate-700/60">
+				<nav class="hidden md:flex items-center gap-1.5 bg-slate-100/90 dark:bg-slate-800/60 p-1 rounded-2xl border border-slate-200/80 dark:border-slate-700/60">
 					{#each navItems as item}
 						<a 
 							href={item.href}
-							class="px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 {$page.url.pathname === item.href ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-400 hover:text-white hover:bg-slate-700/50'}"
+							class="px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 {$page.url.pathname === item.href ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-white dark:hover:bg-slate-700/50'}"
 						>
 							<span class="material-symbols-outlined text-lg">{item.icon}</span>
 							<span>{item.label}</span>
@@ -50,21 +51,33 @@
 					{/each}
 				</nav>
 
-				<!-- User Profile & Action -->
-				<div class="flex items-center gap-3">
+				<!-- User Profile, Theme Toggle & Action -->
+				<div class="flex items-center gap-2 sm:gap-3">
+					<!-- Theme Mode Toggle Button -->
+					<button
+						type="button"
+						onclick={() => theme.toggle()}
+						title={theme.current === 'dark' ? 'Beralih ke Mode Terang (Light Mode)' : 'Beralih ke Mode Gelap (Dark Mode)'}
+						class="w-9 h-9 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-amber-300 flex items-center justify-center transition-all border border-slate-200 dark:border-slate-700 shadow-xs cursor-pointer"
+					>
+						<span class="material-symbols-outlined text-lg">
+							{theme.current === 'dark' ? 'light_mode' : 'dark_mode'}
+						</span>
+					</button>
+
 					{#if user}
-						<a href="/profile" class="flex items-center gap-2.5 p-1.5 pr-3 rounded-2xl bg-slate-800/80 border border-slate-700 hover:border-slate-600 transition-all">
-							<div class="w-8 h-8 rounded-xl bg-indigo-500/20 text-indigo-400 border border-indigo-500/40 flex items-center justify-center font-black text-xs">
+						<a href="/profile" class="flex items-center gap-2.5 p-1.5 pr-3 rounded-2xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 transition-all">
+							<div class="w-8 h-8 rounded-xl bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 border border-indigo-500/30 flex items-center justify-center font-black text-xs">
 								{user.name[0] || 'K'}
 							</div>
 							<div class="hidden lg:block text-left">
-								<p class="text-xs font-bold text-white leading-tight truncate max-w-[130px]">{user.name}</p>
-								<p class="text-[10px] text-slate-400 font-medium">{user.payrollId}</p>
+								<p class="text-xs font-bold text-slate-900 dark:text-white leading-tight truncate max-w-[130px]">{user.name}</p>
+								<p class="text-[10px] text-slate-500 dark:text-slate-400 font-medium">{user.payrollId}</p>
 							</div>
 						</a>
 
 						<form method="POST" action="/login?/logout" class="hidden sm:block">
-							<button type="submit" title="Logout" class="w-9 h-9 rounded-xl bg-slate-800 hover:bg-rose-950/40 hover:text-rose-400 text-slate-400 flex items-center justify-center transition-colors border border-slate-700/80">
+							<button type="submit" title="Logout" class="w-9 h-9 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-rose-50 dark:hover:bg-rose-950/40 hover:text-rose-600 dark:hover:text-rose-400 text-slate-500 dark:text-slate-400 flex items-center justify-center transition-colors border border-slate-200 dark:border-slate-700/80 cursor-pointer">
 								<span class="material-symbols-outlined text-lg">logout</span>
 							</button>
 						</form>
@@ -85,14 +98,14 @@
 
 	{#if !isLoginPage}
 		<!-- MOBILE BOTTOM NAVIGATION (Smartphones Only) -->
-		<nav class="md:hidden fixed bottom-0 inset-x-0 bg-slate-900/95 backdrop-blur-lg border-t border-slate-800/90 z-50 px-2 py-2 shadow-2xl flex items-center justify-around">
+		<nav class="md:hidden fixed bottom-0 inset-x-0 bg-white/95 dark:bg-slate-900/95 backdrop-blur-lg border-t border-slate-200/90 dark:border-slate-800/90 z-50 px-2 py-2 shadow-2xl flex items-center justify-around">
 			{#each navItems as item}
 				{@const isActive = $page.url.pathname === item.href}
 				<a 
 					href={item.href}
-					class="flex flex-col items-center justify-center py-1 px-3 rounded-2xl transition-all {isActive ? 'text-indigo-400 font-black scale-105' : 'text-slate-400 hover:text-slate-200'}"
+					class="flex flex-col items-center justify-center py-1 px-3 rounded-2xl transition-all {isActive ? 'text-indigo-600 dark:text-indigo-400 font-black scale-105' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'}"
 				>
-					<span class="material-symbols-outlined text-2xl {isActive ? 'fill text-indigo-400' : ''}">{item.icon}</span>
+					<span class="material-symbols-outlined text-2xl {isActive ? 'fill text-indigo-600 dark:text-indigo-400' : ''}">{item.icon}</span>
 					<span class="text-[10px] font-bold mt-0.5">{item.label}</span>
 				</a>
 			{/each}

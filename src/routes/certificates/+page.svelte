@@ -15,17 +15,17 @@
 	<!-- HEADER -->
 	<div class="flex flex-col md:flex-row md:items-end justify-between gap-4">
 		<div>
-			<h1 class="text-2xl font-black text-white tracking-tight">Sertifikat Kelulusan Resmi</h1>
-			<p class="text-xs text-slate-400 mt-0.5">
+			<h1 class="text-2xl font-black text-slate-900 dark:text-white tracking-tight">Sertifikat Kelulusan Resmi</h1>
+			<p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
 				Daftar sertifikat kompetensi & pelatihan keselamatan kerja terverifikasi PT BCS Logistics.
 			</p>
 		</div>
 	</div>
 
 	{#if certificates.length === 0}
-		<div class="p-12 text-center bg-slate-900 border border-slate-800 rounded-3xl space-y-3">
-			<span class="material-symbols-outlined text-4xl text-slate-600">workspace_premium</span>
-			<h3 class="font-bold text-slate-300 text-sm">Belum Ada Sertifikat yang Diterbitkan</h3>
+		<div class="p-12 text-center bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl space-y-3">
+			<span class="material-symbols-outlined text-4xl text-slate-400 dark:text-slate-600">workspace_premium</span>
+			<h3 class="font-bold text-slate-800 dark:text-slate-300 text-sm">Belum Ada Sertifikat yang Diterbitkan</h3>
 			<p class="text-xs text-slate-500 max-w-sm mx-auto">
 				Selesaikan seluruh bab dan post-test kuis pada modul yang di-assign untuk menerbitkan sertifikat resmi.
 			</p>
@@ -42,20 +42,20 @@
 					<button 
 						type="button" 
 						onclick={() => selectedCert = cert}
-						class="w-full text-left p-4 rounded-3xl transition-all border cursor-pointer {isSelected ? 'bg-indigo-950/60 border-indigo-500/60 shadow-lg' : 'bg-slate-900 border-slate-800 hover:border-slate-700'}"
+						class="w-full text-left p-4 rounded-3xl transition-all border cursor-pointer {isSelected ? 'bg-indigo-50/80 border-indigo-400 dark:bg-indigo-950/60 dark:border-indigo-500/60 shadow-lg' : 'bg-white dark:bg-slate-900 border-slate-200/80 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'}"
 					>
 						<div class="flex items-center gap-3 mb-2">
-							<span class="material-symbols-outlined text-2xl {isSelected ? 'text-amber-400' : 'text-slate-500'}">
+							<span class="material-symbols-outlined text-2xl {isSelected ? 'text-amber-500 dark:text-amber-400' : 'text-slate-400 dark:text-slate-500'}">
 								workspace_premium
 							</span>
-							<span class="text-[10px] font-black uppercase tracking-wider text-indigo-400">
+							<span class="text-[10px] font-black uppercase tracking-wider text-indigo-600 dark:text-indigo-400">
 								{cert.category}
 							</span>
 						</div>
-						<h3 class="font-bold text-sm text-white line-clamp-2 mb-2">{cert.courseTitle}</h3>
-						<div class="flex justify-between items-center text-[10px] text-slate-400 pt-2 border-t border-slate-800/80">
+						<h3 class="font-bold text-sm text-slate-900 dark:text-white line-clamp-2 mb-2">{cert.courseTitle}</h3>
+						<div class="flex justify-between items-center text-[10px] text-slate-500 dark:text-slate-400 pt-2 border-t border-slate-100 dark:border-slate-800/80">
 							<span class="font-mono">{cert.certificateNumber}</span>
-							<span class="text-emerald-400 font-bold">Skor: {cert.score}</span>
+							<span class="text-emerald-600 dark:text-emerald-400 font-bold">Skor: {cert.score}</span>
 						</div>
 					</button>
 				{/each}
