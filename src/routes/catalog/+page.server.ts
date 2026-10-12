@@ -1,7 +1,6 @@
 import { redirect } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
 import sql from '$lib/server/db';
-import { COURSES_CATALOG } from '$lib/server/mockData';
 import type { Course } from '$lib/types/academy';
 
 export const load: PageServerLoad = async ({ parent }) => {
@@ -11,9 +10,14 @@ export const load: PageServerLoad = async ({ parent }) => {
 	}
 
 	try {
+		const userPayrollId = (user.payrollId || '').toUpperCase().trim();
+
+		// Hanya ambil kursus resmi yang ditautkan ke akun karyawan ini (hris.lms_enrollments)
 		const rows = await sql`
 			SELECT 
 				c.*,
+				e.status as enrollment_status,
+				e.progress_percent,
 				COALESCE(
 					json_agg(
 						json_build_object(
@@ -28,39 +32,40 @@ export const load: PageServerLoad = async ({ parent }) => {
 					) FILTER (WHERE m.id IS NOT NULL), '[]'::json
 				) as modules
 			FROM hris.lms_courses c
+			JOIN hris.lms_enrollments e ON e.course_id = c.id
 			LEFT JOIN hris.lms_modules m ON m.course_id = c.id
 			WHERE c.status = 'Published'
-			GROUP BY c.id
+			  AND UPPER(TRIM(e.payroll_id)) = ${userPayrollId}
+			GROUP BY c.id, e.status, e.progress_percent
 			ORDER BY c.created_at DESC;
 		`;
 
-		if (rows && rows.length > 0) {
-			const dbCatalog: Course[] = rows.map((r: any) => ({
-				id: r.id,
-				title: r.title,
-				category: r.category,
-				level: r.level,
-				durationHours: Number(r.duration_hours),
-				modulesCount: r.modules_count || (r.modules ? r.modules.length : 0),
-				enrolledCount: r.enrolled_count || 0,
-				completionRate: Number(r.completion_rate) || 0,
-				rating: Number(r.rating) || 5.0,
-				instructor: r.instructor || 'Internal Trainer BCS',
-				description: r.description || '',
-				tags: r.tags || [],
-				thumbnailUrl: r.thumbnail_url,
-				modules: r.modules || []
-			}));
+		const dbCatalog: Course[] = (rows || []).map((r: any) => ({
+			id: r.id,
+			title: r.title,
+			category: r.category,
+			level: r.level,
+			durationHours: Number(r.duration_hours),
+			modulesCount: r.modules_count || (r.modules ? r.modules.length : 0),
+			enrolledCount: r.enrolled_count || 0,
+			completionRate: Number(r.completion_rate) || 0,
+			rating: Number(r.rating) || 5.0,
+			instructor: r.instructor || 'Internal Trainer BCS',
+			description: r.description || '',
+			tags: r.tags || [],
+			thumbnailUrl: r.thumbnail_url,
+			modules: r.modules || []
+		}));
 
-			return {
-				catalog: dbCatalog
-			};
-		}
+		return {
+			user,
+			catalog: dbCatalog
+		};
 	} catch (err) {
-		console.error('Failed to load courses from DB, using fallback catalog:', err);
+		console.error('Failed to load courses from DB:', err);
+		return {
+			user,
+			catalog: []
+		};
 	}
-
-	return {
-		catalog: COURSES_CATALOG
-	};
 };

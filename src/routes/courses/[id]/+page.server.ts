@@ -1,11 +1,10 @@
 import { error, redirect } from '@sveltejs/kit';
 import type { PageServerLoad, Actions } from './$types';
 import sql from '$lib/server/db';
-import { COURSES_CATALOG } from '$lib/server/mockData';
 import { decodeSession } from '$lib/server/auth';
 import type { Course, QuizQuestion, EmployeeUser } from '$lib/types/academy';
 
-function getSessionUser(cookies: any): EmployeeUser {
+function getSessionUser(cookies: any): EmployeeUser | null {
 	try {
 		const token = cookies.get('bcs_academy_token');
 		if (token) {
@@ -15,30 +14,18 @@ function getSessionUser(cookies: any): EmployeeUser {
 	} catch (e) {
 		console.error('Error decoding session token:', e);
 	}
-
-	// Fallback ke session demo terdaftar jika cookie belum ada
-	return {
-		id: 42,
-		payrollId: 'EMP-0042',
-		name: 'GUNTORO MUHAMAD',
-		division: 'OPERATION',
-		divisionCode: 'DV_41',
-		title: 'PENGEMUDI TRUK TRONTON',
-		levelSequence: 1
-	};
+	return null;
 }
 
 export const load: PageServerLoad = async ({ params, parent, cookies }) => {
-	let user = getSessionUser(cookies);
-	try {
-		const parentData = await parent();
-		if (parentData?.user) {
-			user = parentData.user;
-		}
-	} catch (e) {
-		// fallback to getSessionUser
+	const parentData = await parent();
+	const user = parentData?.user || getSessionUser(cookies);
+
+	if (!user) {
+		throw redirect(303, '/login');
 	}
 
+	const userPayrollId = (user.payrollId || '').toUpperCase().trim();
 	let course: Course | undefined;
 
 	try {
@@ -87,10 +74,6 @@ export const load: PageServerLoad = async ({ params, parent, cookies }) => {
 		}
 	} catch (e) {
 		console.error('Error loading course from DB:', e);
-	}
-
-	if (!course) {
-		course = COURSES_CATALOG.find((c) => c.id === params.id) || COURSES_CATALOG[0];
 	}
 
 	if (!course) {
@@ -202,41 +185,49 @@ export const load: PageServerLoad = async ({ params, parent, cookies }) => {
 		];
 	}
 
-	// 3. Ambil Rekam Jejak Enrollment Karyawan
+	// 3. Ambil Rekam Jejak Enrollment Karyawan & Validasi Akses
 	let enrollment: any = null;
 	let certificate: any = null;
 	let initialStep: 1 | 2 | 3 | 4 | 5 = 1;
 
+	let enrollRows: any[] = [];
 	try {
-		const enrollRows = await sql`
+		enrollRows = await sql`
 			SELECT * FROM hris.lms_enrollments
-			WHERE course_id = ${params.id} AND UPPER(payroll_id) = ${user.payrollId.toUpperCase()}
+			WHERE course_id = ${params.id} AND UPPER(TRIM(payroll_id)) = ${userPayrollId}
 			LIMIT 1;
 		`;
+	} catch (err) {
+		console.error('Error querying enrollment:', err);
+	}
 
-		if (enrollRows && enrollRows.length > 0) {
-			enrollment = {
-				id: enrollRows[0].id,
-				courseId: enrollRows[0].course_id,
-				payrollId: enrollRows[0].payroll_id,
-				employeeName: enrollRows[0].employee_name,
-				status: enrollRows[0].status,
-				progressPercent: Number(enrollRows[0].progress_percent || 0),
-				completedModulesCount: Number(enrollRows[0].completed_modules_count || 0),
-				totalModulesCount: Number(enrollRows[0].total_modules_count || course.modules.length),
-				preTestScore: enrollRows[0].pre_test_score !== null ? Number(enrollRows[0].pre_test_score) : null,
-				postTestScore: enrollRows[0].post_test_score !== null ? Number(enrollRows[0].post_test_score) : null,
-				enrolledAt: enrollRows[0].enrolled_at ? enrollRows[0].enrolled_at.toISOString() : '',
-				completedAt: enrollRows[0].completed_at ? enrollRows[0].completed_at.toISOString() : '',
-				hasCertificate: Boolean(enrollRows[0].has_certificate),
-				certificateNumber: enrollRows[0].certificate_number
-			};
-		}
+	if (!enrollRows || enrollRows.length === 0) {
+		throw error(403, 'Akses Ditolak: Anda belum ditautkan ke modul pelatihan ini oleh Human Capital / TnD.');
+	}
 
+	const enroll = enrollRows[0];
+	enrollment = {
+		id: enroll.id,
+		courseId: enroll.course_id,
+		payrollId: enroll.payroll_id,
+		employeeName: enroll.employee_name,
+		status: enroll.status,
+		progressPercent: Number(enroll.progress_percent || 0),
+		completedModulesCount: Number(enroll.completed_modules_count || 0),
+		totalModulesCount: Number(enroll.total_modules_count || course.modules.length),
+		preTestScore: enroll.pre_test_score !== null ? Number(enroll.pre_test_score) : null,
+		postTestScore: enroll.post_test_score !== null ? Number(enroll.post_test_score) : null,
+		enrolledAt: enroll.enrolled_at ? enroll.enrolled_at.toISOString() : '',
+		completedAt: enroll.completed_at ? enroll.completed_at.toISOString() : '',
+		hasCertificate: Boolean(enroll.has_certificate),
+		certificateNumber: enroll.certificate_number
+	};
+
+	try {
 		// Ambil sertifikat jika ada
 		const certRows = await sql`
 			SELECT * FROM hris.lms_certificates
-			WHERE course_id = ${params.id} AND UPPER(payroll_id) = ${user.payrollId.toUpperCase()}
+			WHERE course_id = ${params.id} AND UPPER(TRIM(payroll_id)) = ${userPayrollId}
 			LIMIT 1;
 		`;
 
@@ -255,7 +246,7 @@ export const load: PageServerLoad = async ({ params, parent, cookies }) => {
 			};
 		}
 	} catch (err) {
-		console.error('Error loading enrollment/certificate:', err);
+		console.error('Error loading certificate:', err);
 	}
 
 	// 4. Tentukan Step Awal secara Cerdas Berdasarkan Progres Riil
@@ -287,11 +278,26 @@ export const actions = {
 	// ══════════════════════════════════════════════════════════════
 	submitPreTest: async ({ request, params, cookies }) => {
 		const user = getSessionUser(cookies);
+		if (!user) {
+			throw redirect(303, '/login');
+		}
 
 		const formData = await request.formData();
 		const courseId = params.id;
-		const payrollId = user.payrollId.toUpperCase();
-		const employeeName = user.name;
+		const payrollId = (user.payrollId || '').toUpperCase().trim();
+
+		const checkEnroll = await sql`
+			SELECT id FROM hris.lms_enrollments
+			WHERE course_id = ${courseId} AND UPPER(TRIM(payroll_id)) = ${payrollId}
+			LIMIT 1;
+		`;
+		if (!checkEnroll || checkEnroll.length === 0) {
+			return {
+				success: false,
+				actionType: 'PRE_TEST',
+				message: 'Akses Ditolak: Anda belum terdaftar pada pelatihan ini.'
+			};
+		}
 
 		// Ambil daftar kunci jawaban pre-test dari DB
 		let questions: any[] = [];
@@ -325,18 +331,13 @@ export const actions = {
 		const score = Math.round((correctCount / Math.max(1, totalQ)) * 100);
 
 		try {
-			// Simpan / Upsert ke hris.lms_enrollments
 			await sql`
-				INSERT INTO hris.lms_enrollments (
-					course_id, payroll_id, employee_name, status, progress_percent,
-					completed_modules_count, total_modules_count, pre_test_score, enrolled_at
-				) VALUES (
-					${courseId}, ${payrollId}, ${employeeName}, 'IN_PROGRESS', 15,
-					0, 4, ${score}, CURRENT_TIMESTAMP
-				)
-				ON CONFLICT (course_id, payroll_id) DO UPDATE SET
+				UPDATE hris.lms_enrollments
+				SET 
 					pre_test_score = ${score},
-					status = CASE WHEN hris.lms_enrollments.status = 'COMPLETED' THEN 'COMPLETED' ELSE 'IN_PROGRESS' END;
+					progress_percent = GREATEST(COALESCE(progress_percent, 0), 15),
+					status = CASE WHEN status = 'COMPLETED' THEN 'COMPLETED' ELSE 'IN_PROGRESS' END
+				WHERE course_id = ${courseId} AND UPPER(TRIM(payroll_id)) = ${payrollId};
 			`;
 
 			return {
@@ -361,10 +362,23 @@ export const actions = {
 	// ══════════════════════════════════════════════════════════════
 	updateModuleProgress: async ({ request, params, cookies }) => {
 		const user = getSessionUser(cookies);
+		if (!user) {
+			throw redirect(303, '/login');
+		}
 
 		const formData = await request.formData();
 		const courseId = params.id;
-		const payrollId = user.payrollId.toUpperCase();
+		const payrollId = (user.payrollId || '').toUpperCase().trim();
+
+		const checkEnroll = await sql`
+			SELECT id FROM hris.lms_enrollments
+			WHERE course_id = ${courseId} AND UPPER(TRIM(payroll_id)) = ${payrollId}
+			LIMIT 1;
+		`;
+		if (!checkEnroll || checkEnroll.length === 0) {
+			return { success: false, message: 'Akses Ditolak: Anda belum terdaftar pada pelatihan ini.' };
+		}
+
 		const completedIdx = Number(formData.get('moduleIndex')) + 1 || 1;
 		const totalModules = Number(formData.get('totalModules')) || 4;
 
@@ -377,7 +391,7 @@ export const actions = {
 					completed_modules_count = GREATEST(COALESCE(completed_modules_count, 0), ${completedIdx}),
 					progress_percent = GREATEST(COALESCE(progress_percent, 0), ${progressPercent}),
 					status = 'IN_PROGRESS'
-				WHERE course_id = ${courseId} AND UPPER(payroll_id) = ${payrollId};
+				WHERE course_id = ${courseId} AND UPPER(TRIM(payroll_id)) = ${payrollId};
 			`;
 			return { success: true, completedIdx };
 		} catch (e: any) {
@@ -386,14 +400,31 @@ export const actions = {
 	},
 
 	// ══════════════════════════════════════════════════════════════
+	// ══════════════════════════════════════════════════════════════
 	// STEP 3: SUBMIT POST-TEST (EVALUASI KELULUSAN KURSUS)
 	// ══════════════════════════════════════════════════════════════
 	submitPostTest: async ({ request, params, cookies }) => {
 		const user = getSessionUser(cookies);
+		if (!user) {
+			throw redirect(303, '/login');
+		}
 
 		const formData = await request.formData();
 		const courseId = params.id;
-		const payrollId = user.payrollId.toUpperCase();
+		const payrollId = (user.payrollId || '').toUpperCase().trim();
+
+		const checkEnroll = await sql`
+			SELECT id FROM hris.lms_enrollments
+			WHERE course_id = ${courseId} AND UPPER(TRIM(payroll_id)) = ${payrollId}
+			LIMIT 1;
+		`;
+		if (!checkEnroll || checkEnroll.length === 0) {
+			return {
+				success: false,
+				actionType: 'POST_TEST',
+				message: 'Akses Ditolak: Anda belum terdaftar pada pelatihan ini.'
+			};
+		}
 
 		let questions: any[] = [];
 		try {
@@ -433,7 +464,7 @@ export const actions = {
 				SET 
 					post_test_score = ${score},
 					progress_percent = ${isPassed ? 90 : 70}
-				WHERE course_id = ${courseId} AND UPPER(payroll_id) = ${payrollId};
+				WHERE course_id = ${courseId} AND UPPER(TRIM(payroll_id)) = ${payrollId};
 			`;
 
 			if (isPassed) {
@@ -469,11 +500,27 @@ export const actions = {
 	// ══════════════════════════════════════════════════════════════
 	submitEvaluationL1: async ({ request, params, cookies }) => {
 		const user = getSessionUser(cookies);
+		if (!user) {
+			throw redirect(303, '/login');
+		}
 
 		const formData = await request.formData();
 		const courseId = params.id;
-		const payrollId = user.payrollId.toUpperCase();
+		const payrollId = (user.payrollId || '').toUpperCase().trim();
 		const employeeName = user.name;
+
+		const checkEnroll = await sql`
+			SELECT id FROM hris.lms_enrollments
+			WHERE course_id = ${courseId} AND UPPER(TRIM(payroll_id)) = ${payrollId}
+			LIMIT 1;
+		`;
+		if (!checkEnroll || checkEnroll.length === 0) {
+			return {
+				success: false,
+				actionType: 'EVALUATION_L1',
+				message: 'Akses Ditolak: Anda belum terdaftar pada pelatihan ini.'
+			};
+		}
 
 		// 1. Ekstrak 15 Butir Skor Likert (1 - 5)
 		const m1 = Math.min(5, Math.max(1, Number(formData.get('m1')) || 5));
@@ -538,7 +585,7 @@ export const actions = {
 			const courseTitle = cRows[0]?.title || 'Training Program';
 			const courseCat = cRows[0]?.category || 'Operations';
 
-			const enrollRows = await sql`SELECT post_test_score FROM hris.lms_enrollments WHERE course_id = ${courseId} AND UPPER(payroll_id) = ${payrollId} LIMIT 1`;
+			const enrollRows = await sql`SELECT post_test_score FROM hris.lms_enrollments WHERE course_id = ${courseId} AND UPPER(TRIM(payroll_id)) = ${payrollId} LIMIT 1`;
 			const finalScore = Number(enrollRows[0]?.post_test_score || 85);
 
 			// 3. Generate Nomor Sertifikat Digital Resmi
@@ -582,7 +629,7 @@ export const actions = {
 					completed_at = CURRENT_TIMESTAMP,
 					has_certificate = TRUE,
 					certificate_number = ${certNumber}
-				WHERE course_id = ${courseId} AND UPPER(payroll_id) = ${payrollId};
+				WHERE course_id = ${courseId} AND UPPER(TRIM(payroll_id)) = ${payrollId};
 			`;
 
 			// 7. Update counter kursus

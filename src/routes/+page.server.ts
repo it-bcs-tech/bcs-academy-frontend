@@ -1,7 +1,6 @@
 import { redirect } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
 import sql from '$lib/server/db';
-import { COURSES_CATALOG } from '$lib/server/mockData';
 import type { Course, Certificate } from '$lib/types/academy';
 
 export const load: PageServerLoad = async ({ parent }) => {
@@ -10,7 +9,7 @@ export const load: PageServerLoad = async ({ parent }) => {
 		throw redirect(303, '/login');
 	}
 
-	let catalog: Course[] = COURSES_CATALOG;
+	let catalog: Course[] = [];
 	let userCerts: Certificate[] = [];
 	let enrollments: any[] = [];
 
