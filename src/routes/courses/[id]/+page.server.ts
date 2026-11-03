@@ -224,26 +224,32 @@ export const load: PageServerLoad = async ({ params, parent, cookies }) => {
 		certificateNumber: enroll.certificate_number
 	};
 
+	let hasActiveCertificate = false;
 	try {
 		// Ambil sertifikat jika ada
 		const certRows = await sql`
 			SELECT * FROM hris.lms_certificates
 			WHERE course_id = ${params.id} AND UPPER(TRIM(payroll_id)) = ${userPayrollId}
+			ORDER BY issued_at DESC
 			LIMIT 1;
 		`;
 
 		if (certRows && certRows.length > 0) {
+			const c = certRows[0];
+			const validUntilDate = c.valid_until ? new Date(c.valid_until) : null;
+			hasActiveCertificate = Boolean(validUntilDate && validUntilDate.getTime() > Date.now());
+
 			certificate = {
-				certificateNumber: certRows[0].certificate_number,
-				payrollId: certRows[0].payroll_id,
-				employeeName: certRows[0].employee_name,
-				courseId: certRows[0].course_id,
-				courseTitle: certRows[0].course_title,
-				category: certRows[0].category,
-				score: Number(certRows[0].score),
-				issuedAt: certRows[0].issued_at ? certRows[0].issued_at.toISOString().split('T')[0] : '',
-				validUntil: certRows[0].valid_until ? certRows[0].valid_until.toISOString().split('T')[0] : '',
-				qrVerifyUrl: certRows[0].qr_verify_url
+				certificateNumber: c.certificate_number,
+				payrollId: c.payroll_id,
+				employeeName: c.employee_name,
+				courseId: c.course_id,
+				courseTitle: c.course_title,
+				category: c.category,
+				score: Number(c.score),
+				issuedAt: c.issued_at ? c.issued_at.toISOString().split('T')[0] : '',
+				validUntil: c.valid_until ? c.valid_until.toISOString().split('T')[0] : '',
+				qrVerifyUrl: c.qr_verify_url
 			};
 		}
 	} catch (err) {
@@ -269,6 +275,7 @@ export const load: PageServerLoad = async ({ params, parent, cookies }) => {
 		preTestQuestions,
 		postTestQuestions,
 		certificate,
+		hasActiveCertificate,
 		initialStep
 	};
 };
@@ -475,12 +482,44 @@ export const actions = {
 
 		const isPassed = score >= passingGrade;
 
+		// Cek apakah karyawan sudah memiliki sertifikat aktif untuk kursus ini
+		let hasActiveCert = false;
+		let activeCertNumber = '';
+		let activeCertValidUntil = '';
+		try {
+			const certRows = await sql`
+				SELECT certificate_number, score, valid_until
+				FROM hris.lms_certificates
+				WHERE course_id = ${courseId}
+				  AND UPPER(TRIM(payroll_id)) = ${payrollId}
+				  AND valid_until > CURRENT_TIMESTAMP
+				ORDER BY issued_at ASC
+				LIMIT 1;
+			`;
+			if (certRows.length > 0) {
+				hasActiveCert = true;
+				activeCertNumber = certRows[0].certificate_number;
+				activeCertValidUntil = certRows[0].valid_until ? certRows[0].valid_until.toISOString().split('T')[0] : '';
+				// Update skor jika nilai baru lebih tinggi (Highest Score Policy)
+				if (isPassed && score > Number(certRows[0].score)) {
+					await sql`
+						UPDATE hris.lms_certificates
+						SET score = ${score}
+						WHERE certificate_number = ${activeCertNumber};
+					`;
+				}
+			}
+		} catch (e) {
+			console.error('Error checking active certificate in submitPostTest:', e);
+		}
+
 		try {
 			await sql`
 				UPDATE hris.lms_enrollments
 				SET 
-					post_test_score = ${score},
-					progress_percent = ${isPassed ? 90 : 70}
+					post_test_score = GREATEST(COALESCE(post_test_score, 0), ${score}),
+					progress_percent = ${isPassed ? 100 : (hasActiveCert ? 100 : 70)},
+					certificate_number = COALESCE(certificate_number, ${activeCertNumber || null})
 				WHERE course_id = ${courseId} AND UPPER(TRIM(payroll_id)) = ${payrollId};
 			`;
 
@@ -493,9 +532,14 @@ export const actions = {
 				passingGrade,
 				correctCount,
 				totalQuestions: totalQ,
+				hasActiveCert,
+				activeCertNumber,
+				activeCertValidUntil,
 				step: isPassed ? 4 : 3,
 				message: isPassed
-					? `Selamat! Anda Lulus Post-Test dengan Nilai ${score}/100 (Passing Grade: ${passingGrade}).`
+					? (hasActiveCert
+						? `Selamat! Anda Lulus Post-Test dengan Nilai ${score}/100. Sertifikat resmi Anda (#${activeCertNumber}) tetap aktif dan nilainya diperbarui.`
+						: `Selamat! Anda Lulus Post-Test dengan Nilai ${score}/100 (Passing Grade: ${passingGrade}).`)
 					: `Nilai Anda ${score}/100 (Belum mencapai batas kelulusan ${passingGrade}).`
 			};
 		} catch (err: any) {
@@ -600,56 +644,111 @@ export const actions = {
 			const enrollRows = await sql`SELECT post_test_score FROM hris.lms_enrollments WHERE course_id = ${courseId} AND UPPER(TRIM(payroll_id)) = ${payrollId} LIMIT 1`;
 			const finalScore = Number(enrollRows[0]?.post_test_score || 85);
 
-			// 3. Generate Nomor Sertifikat Digital Resmi
-			const certSeq = Math.floor(1000 + Math.random() * 9000);
-			const certNumber = `CERT-BCS-2026-${certSeq}`;
-			const qrUrl = `https://academy.bcslabs.tech/verify/${certNumber}`;
-
-			// Tanggal terbit & masa berlaku 1 tahun persis
-			const issueDate = new Date();
-			const validUntilDate = new Date(issueDate);
-			validUntilDate.setFullYear(validUntilDate.getFullYear() + 1);
-
-			// 4. Simpan ke hris.lms_certificates dengan Masa Berlaku 1 TAHUN
-			await sql`
-				INSERT INTO hris.lms_certificates (
-					certificate_number, payroll_id, employee_name, course_id, course_title,
-					category, score, issued_at, valid_until, qr_verify_url
-				) VALUES (
-					${certNumber}, ${payrollId}, ${employeeName}, ${courseId}, ${courseTitle},
-					${courseCat}, ${finalScore}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP + INTERVAL '1 year', ${qrUrl}
-				)
-				ON CONFLICT (certificate_number) DO NOTHING;
+			// 3. Cek apakah karyawan sudah memiliki sertifikat aktif (valid_until > now)
+			const existingCertRows = await sql`
+				SELECT * FROM hris.lms_certificates
+				WHERE course_id = ${courseId} 
+				  AND UPPER(TRIM(payroll_id)) = ${payrollId}
+				  AND valid_until > CURRENT_TIMESTAMP
+				ORDER BY issued_at ASC
+				LIMIT 1;
 			`;
 
-			// 5. Jadwalkan Evaluasi Perilaku Lapangan (Level 3 & 4) untuk Atasan (H+3 Bulan)
-			await sql`
-				INSERT INTO hris.lms_evaluations_l3_l4 (
-					course_id, payroll_id, employee_name, supervisor_name, due_date, status
-				) VALUES (
-					${courseId}, ${payrollId}, ${employeeName}, 'Supervisor Operasional Lapangan',
-					CURRENT_DATE + INTERVAL '3 months', 'PENDING'
-				);
-			`;
+			let certNumber = '';
+			let issueDate: Date;
+			let validUntilDate: Date;
+			let qrUrl = '';
+			let certScore = finalScore;
 
-			// 6. Tandai Enrollment Selesai (COMPLETED, Progress 100%)
-			await sql`
-				UPDATE hris.lms_enrollments
-				SET 
-					status = 'COMPLETED',
-					progress_percent = 100,
-					completed_at = CURRENT_TIMESTAMP,
-					has_certificate = TRUE,
-					certificate_number = ${certNumber}
-				WHERE course_id = ${courseId} AND UPPER(TRIM(payroll_id)) = ${payrollId};
-			`;
+			if (existingCertRows.length > 0) {
+				// JANGAN buat sertifikat baru jika sertifikat lama masih aktif!
+				const activeCert = existingCertRows[0];
+				certNumber = activeCert.certificate_number;
+				issueDate = activeCert.issued_at ? new Date(activeCert.issued_at) : new Date();
+				validUntilDate = activeCert.valid_until ? new Date(activeCert.valid_until) : new Date(Date.now() + 365 * 24 * 3600 * 1000);
+				qrUrl = activeCert.qr_verify_url || `https://academy.bcslabs.tech/verify/${certNumber}`;
 
-			// 7. Update counter kursus
-			await sql`
-				UPDATE hris.lms_courses
-				SET enrolled_count = enrolled_count + 1, updated_at = CURRENT_TIMESTAMP
-				WHERE id = ${courseId};
-			`;
+				// Update skor jika nilai baru lebih tinggi (Highest Score Policy)
+				if (finalScore > Number(activeCert.score)) {
+					certScore = finalScore;
+					await sql`
+						UPDATE hris.lms_certificates
+						SET score = ${finalScore}
+						WHERE certificate_number = ${certNumber};
+					`;
+				} else {
+					certScore = Number(activeCert.score);
+				}
+
+				// Enrollment tetap dihubungkan ke nomor sertifikat aktif yang sah
+				await sql`
+					UPDATE hris.lms_enrollments
+					SET 
+						status = 'COMPLETED',
+						progress_percent = 100,
+						completed_at = COALESCE(completed_at, CURRENT_TIMESTAMP),
+						has_certificate = TRUE,
+						certificate_number = ${certNumber},
+						post_test_score = GREATEST(COALESCE(post_test_score, 0), ${certScore})
+					WHERE course_id = ${courseId} AND UPPER(TRIM(payroll_id)) = ${payrollId};
+				`;
+			} else {
+				// Sertifikat Belum Ada atau Sudah Kadaluarsa -> Terbitkan Sertifikat Baru
+				const certSeq = Math.floor(1000 + Math.random() * 9000);
+				certNumber = `CERT-BCS-2026-${certSeq}`;
+				qrUrl = `https://academy.bcslabs.tech/verify/${certNumber}`;
+				issueDate = new Date();
+				validUntilDate = new Date(issueDate);
+				validUntilDate.setFullYear(validUntilDate.getFullYear() + 1);
+
+				// Simpan ke hris.lms_certificates dengan Masa Berlaku 1 TAHUN
+				await sql`
+					INSERT INTO hris.lms_certificates (
+						certificate_number, payroll_id, employee_name, course_id, course_title,
+						category, score, issued_at, valid_until, qr_verify_url
+					) VALUES (
+						${certNumber}, ${payrollId}, ${employeeName}, ${courseId}, ${courseTitle},
+						${courseCat}, ${finalScore}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP + INTERVAL '1 year', ${qrUrl}
+					)
+					ON CONFLICT (certificate_number) DO NOTHING;
+				`;
+
+				// Jadwalkan Evaluasi Perilaku Lapangan (Level 3 & 4) untuk Atasan jika belum ada yang pending
+				const existingL3 = await sql`
+					SELECT id FROM hris.lms_evaluations_l3_l4
+					WHERE course_id = ${courseId} AND UPPER(TRIM(payroll_id)) = ${payrollId} AND status = 'PENDING'
+					LIMIT 1;
+				`;
+				if (!existingL3 || existingL3.length === 0) {
+					await sql`
+						INSERT INTO hris.lms_evaluations_l3_l4 (
+							course_id, payroll_id, employee_name, supervisor_name, due_date, status
+						) VALUES (
+							${courseId}, ${payrollId}, ${employeeName}, 'Supervisor Operasional Lapangan',
+							CURRENT_DATE + INTERVAL '3 months', 'PENDING'
+						);
+					`;
+				}
+
+				// Tandai Enrollment Selesai (COMPLETED, Progress 100%)
+				await sql`
+					UPDATE hris.lms_enrollments
+					SET 
+						status = 'COMPLETED',
+						progress_percent = 100,
+						completed_at = CURRENT_TIMESTAMP,
+						has_certificate = TRUE,
+						certificate_number = ${certNumber}
+					WHERE course_id = ${courseId} AND UPPER(TRIM(payroll_id)) = ${payrollId};
+				`;
+
+				// Update counter kursus hanya saat sertifikat baru terbit
+				await sql`
+					UPDATE hris.lms_courses
+					SET enrolled_count = enrolled_count + 1, updated_at = CURRENT_TIMESTAMP
+					WHERE id = ${courseId};
+				`;
+			}
 
 			const certificateData = {
 				certificateNumber: certNumber,
@@ -658,7 +757,7 @@ export const actions = {
 				courseId,
 				courseTitle,
 				category: courseCat,
-				score: finalScore,
+				score: certScore,
 				issuedAt: issueDate.toISOString().split('T')[0],
 				validUntil: validUntilDate.toISOString().split('T')[0],
 				qrVerifyUrl: qrUrl

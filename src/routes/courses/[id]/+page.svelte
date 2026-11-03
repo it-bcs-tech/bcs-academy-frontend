@@ -182,12 +182,21 @@
 
 	let scoreDelta = $derived(postScoreVal - preScoreVal);
 
+	let hasActiveCertificate = $derived(
+		form?.actionType === 'POST_TEST' && typeof form.hasActiveCert === 'boolean'
+			? form.hasActiveCert
+			: Boolean(data.hasActiveCertificate || (activeCert?.validUntil && new Date(activeCert.validUntil).getTime() > Date.now()))
+	);
+
 	// Sinkronisasi step berdasarkan kembalian server action
 	$effect(() => {
 		if (form) {
 			if (form.actionType === 'POST_TEST') {
 				showComparisonModal = true;
 				isPostTestSubmitted = true;
+				if (form.hasActiveCert && activeCert) {
+					activeCert.score = Math.max(Number(activeCert.score) || 0, form.score);
+				}
 			} else if (form.success) {
 				if (form.step) {
 					currentStep = form.step as 1 | 2 | 3 | 4 | 5;
@@ -852,7 +861,11 @@
 									SELAMAT, ANDA DINYATAKAN LULUS!
 								</div>
 								<p class="text-emerald-700 dark:text-emerald-300 leading-relaxed text-[11px]">
-									Nilai Post-Test Anda ({postScoreVal}) melampaui batas minimum Passing Grade ({coursePassingGrade}). Anda berhak melanjutkan ke evaluasi pelatihan untuk penerbitan E-Sertifikat resmi.
+									{#if hasActiveCertificate}
+										Nilai Post-Test Anda ({postScoreVal}) melampaui Passing Grade ({coursePassingGrade}). E-Sertifikat resmi Anda (#{activeCert?.certificateNumber || form?.activeCertNumber || 'AKTIF'}) tetap berlaku aktif hingga {activeCert?.validUntil || '1 Tahun'} dan nilai tertingginya telah diperbarui.
+									{:else}
+										Nilai Post-Test Anda ({postScoreVal}) melampaui batas minimum Passing Grade ({coursePassingGrade}). Anda berhak melanjutkan ke evaluasi pelatihan untuk penerbitan E-Sertifikat resmi.
+									{/if}
 								</p>
 							</div>
 						</div>
@@ -880,17 +893,42 @@
 							Tutup
 						</button>
 						{#if isTestPassed}
-							<button
-								type="button"
-								onclick={() => {
-									showComparisonModal = false;
-									currentStep = 4;
-								}}
-								class="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-black shadow-lg shadow-emerald-600/30 transition-all cursor-pointer flex items-center justify-center gap-1.5"
-							>
-								<span>Lanjut ke Evaluasi Kepuasan</span>
-								<span class="material-symbols-outlined text-sm">arrow_forward</span>
-							</button>
+							{#if hasActiveCertificate}
+								<button
+									type="button"
+									onclick={() => {
+										showComparisonModal = false;
+										currentStep = 4;
+									}}
+									class="w-full sm:w-auto px-4 py-2.5 rounded-xl border border-indigo-300 dark:border-indigo-700 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5"
+								>
+									<span>Evaluasi (Opsional)</span>
+									<span class="material-symbols-outlined text-sm">rate_review</span>
+								</button>
+								<button
+									type="button"
+									onclick={() => {
+										showComparisonModal = false;
+										currentStep = 5;
+									}}
+									class="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-black shadow-lg shadow-emerald-600/30 transition-all cursor-pointer flex items-center justify-center gap-1.5"
+								>
+									<span>Buka E-Sertifikat Aktif</span>
+									<span class="material-symbols-outlined text-sm">workspace_premium</span>
+								</button>
+							{:else}
+								<button
+									type="button"
+									onclick={() => {
+										showComparisonModal = false;
+										currentStep = 4;
+									}}
+									class="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-black shadow-lg shadow-emerald-600/30 transition-all cursor-pointer flex items-center justify-center gap-1.5"
+								>
+									<span>Lanjut ke Evaluasi Kepuasan</span>
+									<span class="material-symbols-outlined text-sm">arrow_forward</span>
+								</button>
+							{/if}
 						{:else}
 							<button
 								type="button"
@@ -932,6 +970,34 @@
 					Sesuai prosedur baku mutu LMS, seluruh 18 indikator (15 butir aspek teknis & 3 butir uraian kualitatif) wajib dilengkapi secara objektif. Pengisian ini menjadi prasyarat pembukaan <strong>E-Sertifikat Digital (Masa Berlaku 1 Tahun)</strong> Anda.
 				</p>
 			</div>
+
+			<!-- Banner jika peserta sudah memiliki sertifikat aktif -->
+			{#if hasActiveCertificate}
+				<div class="p-4 rounded-2xl bg-gradient-to-r from-emerald-500/10 via-indigo-500/10 to-teal-500/10 border border-emerald-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+					<div class="flex items-center gap-3">
+						<span class="material-symbols-outlined text-emerald-600 dark:text-emerald-400 text-3xl shrink-0">verified</span>
+						<div>
+							<h4 class="font-bold text-xs sm:text-sm text-slate-900 dark:text-white flex items-center gap-2">
+								<span>E-Sertifikat Anda Sedang Aktif</span>
+								<span class="px-2 py-0.5 rounded-full text-[10px] font-black uppercase bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
+									#{activeCert?.certificateNumber || 'AKTIF'}
+								</span>
+							</h4>
+							<p class="text-[11px] text-slate-600 dark:text-slate-300 mt-0.5">
+								Berlaku hingga <strong>{activeCert?.validUntil || '1 Tahun'}</strong>. Evaluasi kepuasan ini bersifat <strong>opsional</strong>. Anda dapat langsung membuka sertifikat aktif atau memperbarui masukan.
+							</p>
+						</div>
+					</div>
+					<button
+						type="button"
+						onclick={() => (currentStep = 5)}
+						class="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-all shadow cursor-pointer flex items-center gap-1.5 shrink-0 self-start sm:self-auto"
+					>
+						<span>Langsung ke Sertifikat</span>
+						<span class="material-symbols-outlined text-base">arrow_forward</span>
+					</button>
+				</div>
+			{/if}
 
 			<!-- Live Completion Counter & Preset Tools -->
 			<div class="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-800 space-y-3">
@@ -1246,7 +1312,7 @@
 						disabled={isSubmitting || !isEvaluationComplete}
 						class="px-8 py-3.5 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black text-xs shadow-lg shadow-emerald-600/30 transition-all cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
 					>
-						<span>{isSubmitting ? 'Memproses E-Sertifikat...' : 'Kirim Evaluasi & Buka E-Sertifikat Resmi'}</span>
+						<span>{isSubmitting ? 'Memproses Masukan...' : (hasActiveCertificate ? 'Perbarui Masukan & Buka Sertifikat' : 'Kirim Evaluasi & Buka E-Sertifikat Resmi')}</span>
 						<span class="material-symbols-outlined text-base">workspace_premium</span>
 					</button>
 				</div>
@@ -1264,10 +1330,10 @@
 					<span class="material-symbols-outlined text-2xl text-emerald-600 dark:text-emerald-400 shrink-0">verified</span>
 					<div>
 						<p class="text-xs font-black text-emerald-900 dark:text-emerald-200">
-							Evaluasi Kirkpatrick Level 1 Telah Diterima & E-Sertifikat Aktif
+							E-Sertifikat Digital Resmi Aktif (Nilai: {activeCert?.score || postScoreVal}/100)
 						</p>
 						<p class="text-[11px] text-emerald-700 dark:text-emerald-400 mt-0.5">
-							Sertifikat digital resmi ini berlaku selama <strong>1 Tahun</strong> sejak tanggal penerbitan.
+							Sertifikat kompetensi ini berlaku sah selama <strong>1 Tahun</strong> hingga <strong>{activeCert?.validUntil || '1 Tahun Mendatang'}</strong>.
 						</p>
 					</div>
 				</div>
