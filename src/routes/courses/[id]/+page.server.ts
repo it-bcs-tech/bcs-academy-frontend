@@ -69,6 +69,7 @@ export const load: PageServerLoad = async ({ params, parent, cookies }) => {
 				description: r.description || '',
 				tags: r.tags || [],
 				thumbnailUrl: r.thumbnail_url,
+				passingGrade: Number(r.passing_grade) || 75,
 				modules: r.modules || []
 			};
 		}
@@ -455,7 +456,23 @@ export const actions = {
 		}
 
 		const score = Math.round((correctCount / Math.max(1, totalQ)) * 100);
-		const passingGrade = 75;
+
+		// Ambil passing grade dari kursus & pre-test score dari enrollment
+		let passingGrade = 75;
+		let preTestScore = 0;
+		try {
+			const cRows = await sql`SELECT passing_grade FROM hris.lms_courses WHERE id = ${courseId} LIMIT 1`;
+			if (cRows.length > 0 && cRows[0].passing_grade) {
+				passingGrade = Number(cRows[0].passing_grade);
+			}
+			const eRows = await sql`SELECT pre_test_score FROM hris.lms_enrollments WHERE course_id = ${courseId} AND UPPER(TRIM(payroll_id)) = ${payrollId} LIMIT 1`;
+			if (eRows.length > 0 && eRows[0].pre_test_score !== null) {
+				preTestScore = Number(eRows[0].pre_test_score);
+			}
+		} catch (e) {
+			console.error('Error fetching course/enrollment metadata in submitPostTest:', e);
+		}
+
 		const isPassed = score >= passingGrade;
 
 		try {
@@ -467,25 +484,20 @@ export const actions = {
 				WHERE course_id = ${courseId} AND UPPER(TRIM(payroll_id)) = ${payrollId};
 			`;
 
-			if (isPassed) {
-				return {
-					success: true,
-					actionType: 'POST_TEST',
-					isPassed: true,
-					score,
-					step: 4,
-					message: `Selamat! Anda Lulus Post-Test dengan Nilai ${score}/100. Silakan lengkapi Evaluasi Kepuasan (Level 1) untuk menerbitkan E-Sertifikat resmi.`
-				};
-			} else {
-				return {
-					success: false,
-					actionType: 'POST_TEST',
-					isPassed: false,
-					score,
-					step: 3,
-					message: `Nilai Anda ${score}/100 (Belum mencapai Passing Grade ${passingGrade}). Silakan pelajari kembali modul materi atau lakukan remedial Post-Test.`
-				};
-			}
+			return {
+				success: true,
+				actionType: 'POST_TEST',
+				isPassed,
+				score,
+				preTestScore,
+				passingGrade,
+				correctCount,
+				totalQuestions: totalQ,
+				step: isPassed ? 4 : 3,
+				message: isPassed
+					? `Selamat! Anda Lulus Post-Test dengan Nilai ${score}/100 (Passing Grade: ${passingGrade}).`
+					: `Nilai Anda ${score}/100 (Belum mencapai batas kelulusan ${passingGrade}).`
+			};
 		} catch (err: any) {
 			return {
 				success: false,

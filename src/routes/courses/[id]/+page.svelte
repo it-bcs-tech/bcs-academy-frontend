@@ -152,14 +152,49 @@
 	// Sertifikat Aktif
 	let activeCert = $state(data.certificate || null);
 
+	// State Popup Komparasi Nilai & Kunci Jawaban Post-Test
+	let showComparisonModal = $state(false);
+	let isPostTestSubmitted = $state(data.enrollment?.postTestScore !== null);
+
+	let preScoreVal = $derived(
+		form?.actionType === 'POST_TEST' && typeof form.preTestScore === 'number'
+			? form.preTestScore
+			: (data.enrollment?.preTestScore ?? 0)
+	);
+
+	let postScoreVal = $derived(
+		form?.actionType === 'POST_TEST' && typeof form.score === 'number'
+			? form.score
+			: (data.enrollment?.postTestScore ?? 0)
+	);
+
+	let coursePassingGrade = $derived(
+		form?.actionType === 'POST_TEST' && typeof form.passingGrade === 'number'
+			? form.passingGrade
+			: (course?.passingGrade ?? 75)
+	);
+
+	let isTestPassed = $derived(
+		form?.actionType === 'POST_TEST' && typeof form.isPassed === 'boolean'
+			? form.isPassed
+			: postScoreVal >= coursePassingGrade
+	);
+
+	let scoreDelta = $derived(postScoreVal - preScoreVal);
+
 	// Sinkronisasi step berdasarkan kembalian server action
 	$effect(() => {
-		if (form && form.success) {
-			if (form.step) {
-				currentStep = form.step as 1 | 2 | 3 | 4 | 5;
-			}
-			if (form.certificate) {
-				activeCert = form.certificate;
+		if (form) {
+			if (form.actionType === 'POST_TEST') {
+				showComparisonModal = true;
+				isPostTestSubmitted = true;
+			} else if (form.success) {
+				if (form.step) {
+					currentStep = form.step as 1 | 2 | 3 | 4 | 5;
+				}
+				if (form.certificate) {
+					activeCert = form.certificate;
+				}
 			}
 		}
 	});
@@ -617,49 +652,35 @@
 						<h3 class="font-black text-base text-slate-900 dark:text-white">Tahap 3: Ujian Evaluasi Kelulusan (Post-Test)</h3>
 					</div>
 					<span class="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border border-amber-300">
-						Passing Grade 75%
+						Passing Grade {coursePassingGrade}%
 					</span>
 				</div>
 				<p class="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
-					Buktikan pemahaman Anda setelah mempelajari materi. Dapatkan nilai minimal <strong>75/100</strong> untuk dinyatakan lulus dan melanjutkan ke penerbitan sertifikat digital resmi.
+					Buktikan pemahaman Anda setelah mempelajari materi. Dapatkan nilai minimal <strong>{coursePassingGrade}/100</strong> untuk dinyatakan lulus dan melanjutkan ke penerbitan sertifikat digital resmi.
 				</p>
 			</div>
 
-			<!-- Feedback Hasil Post-Test jika ada -->
-			{#if form && form.actionType === 'POST_TEST'}
-				{#if form.isPassed}
-					<div class="p-5 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-800/60 text-center space-y-3">
-						<span class="material-symbols-outlined text-4xl text-emerald-600">verified</span>
+			<!-- Banner Kunci Jawaban jika Post-Test sudah dikirim -->
+			{#if isPostTestSubmitted}
+				<div class="p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-800/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+					<div class="flex items-center gap-3">
+						<span class="material-symbols-outlined text-amber-600 text-2xl shrink-0">lock</span>
 						<div>
-							<h4 class="font-black text-base text-emerald-900 dark:text-emerald-200">Selamat! Anda Lulus Post-Test</h4>
-							<p class="text-xs text-emerald-700 dark:text-emerald-400 mt-0.5">Nilai Anda: <strong>{form.score}/100</strong> (Passing Grade: 75)</p>
-						</div>
-						<button
-							type="button"
-							onclick={() => (currentStep = 4)}
-							class="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-all shadow-md cursor-pointer"
-						>
-							Lanjut ke Evaluasi Kepuasan (Level 1) &rarr;
-						</button>
-					</div>
-				{:else}
-					<div class="p-5 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-300 dark:border-rose-800/60 text-center space-y-3">
-						<span class="material-symbols-outlined text-4xl text-rose-600">cancel</span>
-						<div>
-							<h4 class="font-black text-base text-rose-900 dark:text-rose-200">Belum Mencapai Passing Grade</h4>
-							<p class="text-xs text-rose-700 dark:text-rose-400 mt-0.5">Nilai Anda: <strong>{form.score}/100</strong> (Passing Grade: 75). Silakan ulangi post-test (remedial).</p>
-						</div>
-						<div class="flex items-center justify-center gap-2">
-							<button
-								type="button"
-								onclick={() => (currentStep = 2)}
-								class="px-4 py-2 rounded-xl border border-rose-300 text-xs font-bold text-rose-800 dark:text-rose-300 hover:bg-rose-100 cursor-pointer"
-							>
-								Tinjau Materi Modul
-							</button>
+							<h4 class="font-bold text-xs sm:text-sm text-slate-900 dark:text-white">Jawaban Post-Test Terkunci</h4>
+							<p class="text-[11px] text-slate-600 dark:text-slate-300">
+								Jawaban telah tersimpan permanen di sistem LMS. Nilai riil Anda: <strong>{postScoreVal}/100</strong> {isTestPassed ? '(Lulus)' : '(Belum Memenuhi Passing Grade)'}.
+							</p>
 						</div>
 					</div>
-				{/if}
+					<button
+						type="button"
+						onclick={() => (showComparisonModal = true)}
+						class="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold transition-all shadow cursor-pointer flex items-center gap-1.5 shrink-0 self-start sm:self-auto"
+					>
+						<span class="material-symbols-outlined text-base">analytics</span>
+						<span>Lihat Komparasi Nilai</span>
+					</button>
+				</div>
 			{/if}
 
 			<!-- Form Soal-Soal Post-Test -->
@@ -689,14 +710,15 @@
 
 							<div class="space-y-2 pl-9">
 								{#each q.options as opt}
-									<label class="flex items-center gap-3 p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 hover:border-amber-400 dark:hover:border-amber-500 transition-all cursor-pointer">
+									<label class="flex items-center gap-3 p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 hover:border-amber-400 dark:hover:border-amber-500 transition-all {isPostTestSubmitted ? 'cursor-not-allowed opacity-75' : 'cursor-pointer'}">
 										<input
 											type="radio"
 											name="post_{q.id}"
 											value={opt.key}
 											bind:group={postAnswers[q.id]}
+											disabled={isPostTestSubmitted || isSubmitting}
 											required
-											class="w-4 h-4 text-amber-600 focus:ring-amber-500 cursor-pointer"
+											class="w-4 h-4 text-amber-600 focus:ring-amber-500 cursor-pointer disabled:cursor-not-allowed"
 										/>
 										<span class="text-xs text-slate-800 dark:text-slate-200 font-medium">
 											<strong class="font-bold text-amber-600 dark:text-amber-400">{opt.key}.</strong> {opt.text}
@@ -717,17 +739,175 @@
 						&larr; Kembali ke Materi
 					</button>
 
-					<button
-						type="submit"
-						disabled={isSubmitting}
-						class="px-6 py-3 rounded-2xl bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white font-black text-xs shadow-lg shadow-amber-600/30 transition-all cursor-pointer flex items-center gap-2 disabled:opacity-50"
-					>
-						<span>{isSubmitting ? 'Memeriksa Jawaban...' : 'Kirim Jawaban Post-Test'}</span>
-						<span class="material-symbols-outlined text-sm">verified</span>
-					</button>
+					{#if !isPostTestSubmitted}
+						<button
+							type="submit"
+							disabled={isSubmitting}
+							class="px-6 py-3 rounded-2xl bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white font-black text-xs shadow-lg shadow-amber-600/30 transition-all cursor-pointer flex items-center gap-2 disabled:opacity-50"
+						>
+							<span>{isSubmitting ? 'Memeriksa Jawaban...' : 'Kirim Jawaban Post-Test'}</span>
+							<span class="material-symbols-outlined text-sm">verified</span>
+						</button>
+					{:else}
+						<div class="flex items-center gap-2">
+							<button
+								type="button"
+								onclick={() => (showComparisonModal = true)}
+								class="px-5 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs shadow transition-all cursor-pointer flex items-center gap-1.5"
+							>
+								<span class="material-symbols-outlined text-sm">analytics</span>
+								<span>Hasil Komparasi</span>
+							</button>
+							{#if isTestPassed}
+								<button
+									type="button"
+									onclick={() => (currentStep = 4)}
+									class="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow transition-all cursor-pointer flex items-center gap-1.5"
+								>
+									<span>Lanjut ke Evaluasi</span>
+									<span class="material-symbols-outlined text-sm">arrow_forward</span>
+								</button>
+							{/if}
+						</div>
+					{/if}
 				</div>
 			</form>
 		</div>
+
+		<!-- POP-UP / MODAL KOMPARASI HASIL PRE-TEST VS POST-TEST -->
+		{#if showComparisonModal}
+			<div
+				class="fixed inset-0 z-50 bg-slate-950/75 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto animate-in fade-in duration-150"
+				role="dialog"
+				aria-modal="true"
+			>
+				<div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-lg w-full p-6 md:p-8 shadow-2xl space-y-6 relative">
+					<!-- Close button top-right -->
+					<button
+						type="button"
+						onclick={() => (showComparisonModal = false)}
+						class="absolute top-5 right-5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+						aria-label="Tutup Modal"
+					>
+						<span class="material-symbols-outlined text-xl">close</span>
+					</button>
+
+					<!-- Header -->
+					<div class="text-center space-y-2 pt-2">
+						<div class="inline-flex p-3 rounded-2xl bg-amber-500/10 text-amber-500 dark:text-amber-400 mb-1">
+							<span class="material-symbols-outlined text-3xl">insights</span>
+						</div>
+						<h3 class="text-lg md:text-xl font-black text-slate-900 dark:text-white">
+							Hasil Evaluasi Pembelajaran
+						</h3>
+						<p class="text-xs text-slate-500 dark:text-slate-400">
+							Komparasi Skor Awal (Pre-Test) vs Capaian Akhir (Post-Test)
+						</p>
+					</div>
+
+					<!-- Komparasi Nilai 2 Kolom -->
+					<div class="grid grid-cols-2 gap-3 md:gap-4">
+						<!-- Pre-Test Card -->
+						<div class="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80 text-center space-y-1">
+							<span class="text-[10px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">
+								Pre-Test (Awal)
+							</span>
+							<div class="text-3xl md:text-4xl font-black text-slate-700 dark:text-slate-300">
+								{preScoreVal}
+							</div>
+							<div class="text-[10px] font-semibold text-slate-400">Skor Baseline</div>
+						</div>
+
+						<!-- Post-Test Card -->
+						<div class="p-4 rounded-2xl {isTestPassed ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-800' : 'bg-rose-50 dark:bg-rose-950/40 border-rose-300 dark:border-rose-800'} border text-center space-y-1">
+							<span class="text-[10px] font-black uppercase tracking-wider {isTestPassed ? 'text-emerald-700 dark:text-emerald-300' : 'text-rose-700 dark:text-rose-300'}">
+								Post-Test (Akhir)
+							</span>
+							<div class="text-3xl md:text-4xl font-black {isTestPassed ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}">
+								{postScoreVal}
+							</div>
+							<div class="text-[10px] font-bold {isTestPassed ? 'text-emerald-600/80 dark:text-emerald-400/80' : 'text-rose-600/80 dark:text-rose-400/80'}">
+								Standar Kelulusan: {coursePassingGrade}
+							</div>
+						</div>
+					</div>
+
+					<!-- Delta Pertumbuhan / Learning Gain -->
+					<div class="p-3.5 rounded-2xl bg-slate-100/70 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700/50 flex items-center justify-between text-xs">
+						<span class="font-bold text-slate-600 dark:text-slate-300 flex items-center gap-1.5">
+							<span class="material-symbols-outlined text-base text-slate-400">trending_up</span>
+							Pertumbuhan Belajar (Gain):
+						</span>
+						<span class="font-black px-2.5 py-1 rounded-lg {scoreDelta > 0 ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300' : scoreDelta === 0 ? 'bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-300' : 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300'}">
+							{scoreDelta > 0 ? `+${scoreDelta} Poin` : `${scoreDelta} Poin`}
+						</span>
+					</div>
+
+					<!-- Status Kelulusan Murni / Apa Adanya -->
+					{#if isTestPassed}
+						<div class="p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 flex items-start gap-3">
+							<span class="material-symbols-outlined text-2xl text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5">verified</span>
+							<div class="space-y-1 text-xs">
+								<div class="font-black text-emerald-900 dark:text-emerald-200">
+									SELAMAT, ANDA DINYATAKAN LULUS!
+								</div>
+								<p class="text-emerald-700 dark:text-emerald-300 leading-relaxed text-[11px]">
+									Nilai Post-Test Anda ({postScoreVal}) melampaui batas minimum Passing Grade ({coursePassingGrade}). Anda berhak melanjutkan ke evaluasi pelatihan untuk penerbitan E-Sertifikat resmi.
+								</p>
+							</div>
+						</div>
+					{:else}
+						<div class="p-4 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800/60 flex items-start gap-3">
+							<span class="material-symbols-outlined text-2xl text-rose-600 dark:text-rose-400 shrink-0 mt-0.5">cancel</span>
+							<div class="space-y-1 text-xs">
+								<div class="font-black text-rose-900 dark:text-rose-200">
+									BELUM MENCAPAI PASSING GRADE ({coursePassingGrade})
+								</div>
+								<p class="text-rose-700 dark:text-rose-300 leading-relaxed text-[11px]">
+									Nilai Post-Test Anda adalah <strong>{postScoreVal}/100</strong>. Sesuai standar mutu pembelajaran, hasil tercatat murni apa adanya. Silakan tinjau kembali modul pembelajaran agar pemahaman materi lebih optimal.
+								</p>
+							</div>
+						</div>
+					{/if}
+
+					<!-- Tombol Aksi Modal -->
+					<div class="flex flex-col-reverse sm:flex-row items-center justify-end gap-2.5 pt-2 border-t border-slate-200 dark:border-slate-800">
+						<button
+							type="button"
+							onclick={() => (showComparisonModal = false)}
+							class="w-full sm:w-auto px-5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+						>
+							Tutup
+						</button>
+						{#if isTestPassed}
+							<button
+								type="button"
+								onclick={() => {
+									showComparisonModal = false;
+									currentStep = 4;
+								}}
+								class="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-black shadow-lg shadow-emerald-600/30 transition-all cursor-pointer flex items-center justify-center gap-1.5"
+							>
+								<span>Lanjut ke Evaluasi Kepuasan</span>
+								<span class="material-symbols-outlined text-sm">arrow_forward</span>
+							</button>
+						{:else}
+							<button
+								type="button"
+								onclick={() => {
+									showComparisonModal = false;
+									currentStep = 2;
+								}}
+								class="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-xs font-black shadow-lg shadow-amber-600/30 transition-all cursor-pointer flex items-center justify-center gap-1.5"
+							>
+								<span>Tinjau Materi Modul</span>
+								<span class="material-symbols-outlined text-sm">menu_book</span>
+							</button>
+						{/if}
+					</div>
+				</div>
+			</div>
+		{/if}
 
 	<!-- ════════════════════════════════════════════════════════════════════════ -->
 	<!-- TAHAP 4: EVALUASI KEPUASAN (KIRKPATRICK LEVEL 1)                         -->

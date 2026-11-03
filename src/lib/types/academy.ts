@@ -55,6 +55,7 @@ export interface Course {
 	description: string;
 	tags: string[];
 	thumbnailUrl?: string;
+	passingGrade?: number;
 	modules: CourseModule[];
 }
 
