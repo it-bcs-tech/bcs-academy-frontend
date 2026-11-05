@@ -135,9 +135,29 @@
 								<span class="px-2.5 py-1 rounded-xl text-[10px] font-black uppercase tracking-wider {item.isTnaGap ? 'bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-700' : 'bg-indigo-100 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800'}">
 									{item.isTnaGap ? 'GAP Kompetensi' : item.course.category}
 								</span>
-								<span class="text-[11px] font-bold {item.status === 'COMPLETED' ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400'}">
-									{item.status === 'COMPLETED' ? 'Selesai' : `Target: ${item.deadline || '-'}`}
-								</span>
+								{#if item.status === 'COMPLETED'}
+									<span class="px-2.5 py-1 rounded-xl text-[10px] font-black bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 flex items-center gap-1">
+										<span class="material-symbols-outlined text-xs">check_circle</span>
+										<span>Selesai</span>
+									</span>
+								{:else if item.schedule?.hasSchedule}
+									{#if item.schedule.isStarted}
+										<span class="px-2.5 py-1 rounded-xl text-[10px] font-black bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 flex items-center gap-1">
+											<span class="material-symbols-outlined text-xs">play_circle</span>
+											<span>Sesi Berlangsung</span>
+										</span>
+									{:else}
+										<span class="px-2.5 py-1 rounded-xl text-[10px] font-black bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-700 flex items-center gap-1">
+											<span class="material-symbols-outlined text-xs">timer</span>
+											<span>{item.schedule.countdownText}</span>
+										</span>
+									{/if}
+								{:else}
+									<span class="px-2.5 py-1 rounded-xl text-[10px] font-black bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700 flex items-center gap-1">
+										<span class="material-symbols-outlined text-xs">hourglass_empty</span>
+										<span>Menunggu Jadwal</span>
+									</span>
+								{/if}
 							</div>
 
 							<!-- Title -->
@@ -180,6 +200,24 @@
 									<span class="truncate max-w-[150px]">{item.course.instructor}</span>
 								</div>
 							</div>
+
+							<!-- Schedule Banner -->
+							{#if item.schedule?.hasSchedule}
+								<div class="px-3.5 py-2.5 rounded-2xl bg-slate-50 dark:bg-slate-950/50 border border-slate-200/60 dark:border-slate-800/60 mb-4 text-[11px] flex items-center justify-between gap-2">
+									<div class="flex items-center gap-1.5 text-slate-600 dark:text-slate-300 min-w-0">
+										<span class="material-symbols-outlined text-sm text-indigo-500 shrink-0">event</span>
+										<span class="truncate">{item.schedule.formattedDate}</span>
+									</div>
+									<span class="shrink-0 font-bold px-2 py-0.5 rounded-lg text-[10px] {item.schedule.isStarted ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300' : 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300'}">
+										{item.schedule.countdownText}
+									</span>
+								</div>
+							{:else if item.status !== 'COMPLETED'}
+								<div class="px-3.5 py-2.5 rounded-2xl bg-slate-50 dark:bg-slate-950/50 border border-dashed border-slate-200 dark:border-slate-800 mb-4 text-[11px] flex items-center gap-2 text-slate-500 dark:text-slate-400">
+									<span class="material-symbols-outlined text-sm text-slate-400 shrink-0">schedule</span>
+									<span class="truncate">Menunggu jadwal resmi dari HRD / TnD</span>
+								</div>
+							{/if}
 						</div>
 
 						<!-- Actions -->
@@ -187,20 +225,41 @@
 							{#if item.hasCertificate}
 								<a 
 									href="/certificates" 
-									class="border border-amber-300 dark:border-amber-500/40 bg-amber-50 dark:bg-amber-950/20 text-amber-800 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-950/40 px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5"
+									class="border border-amber-300 dark:border-amber-500/40 bg-amber-50 dark:bg-amber-950/20 text-amber-800 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-950/40 px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shrink-0"
 								>
 									<span class="material-symbols-outlined text-sm text-amber-500 dark:text-amber-400">workspace_premium</span>
 									<span>Sertifikat</span>
 								</a>
 							{/if}
 
-							<a 
-								href="/courses/{item.courseId}" 
-								class="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white py-2.5 px-4 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-md active:scale-98"
-							>
-								<span>{item.progressPercent === 100 ? 'Ulangi Materi' : (item.progressPercent > 0 ? 'Lanjutkan Belajar' : 'Mulai Belajar')}</span>
-								<span class="material-symbols-outlined text-sm">arrow_forward</span>
-							</a>
+							{#if item.status === 'COMPLETED'}
+								<a 
+									href="/courses/{item.courseId}" 
+									class="flex-1 bg-slate-800 hover:bg-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700 text-white py-2.5 px-4 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-sm active:scale-98"
+									title="Pelatihan selesai. Anda dapat meninjau kembali materi modul pembelajaran."
+								>
+									<span class="material-symbols-outlined text-sm">visibility</span>
+									<span>Tinjau Materi</span>
+								</a>
+							{:else if item.schedule?.isLocked}
+								<button 
+									type="button" 
+									disabled 
+									class="flex-1 bg-slate-100 dark:bg-slate-800/80 text-slate-400 dark:text-slate-500 py-2.5 px-4 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 cursor-not-allowed border border-slate-200/80 dark:border-slate-700/80"
+									title={item.schedule.statusMessage}
+								>
+									<span class="material-symbols-outlined text-sm">lock</span>
+									<span>{item.schedule.hasSchedule ? `Terkunci (${item.schedule.countdownText})` : 'Menunggu Jadwal'}</span>
+								</button>
+							{:else}
+								<a 
+									href="/courses/{item.courseId}" 
+									class="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white py-2.5 px-4 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-md active:scale-98"
+								>
+									<span>{item.progressPercent > 0 ? 'Lanjutkan Belajar' : 'Mulai Belajar'}</span>
+									<span class="material-symbols-outlined text-sm">arrow_forward</span>
+								</a>
+							{/if}
 						</div>
 					</div>
 				{/each}

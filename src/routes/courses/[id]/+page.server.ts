@@ -3,6 +3,7 @@ import type { PageServerLoad, Actions } from './$types';
 import sql from '$lib/server/db';
 import { decodeSession } from '$lib/server/auth';
 import type { Course, QuizQuestion, EmployeeUser } from '$lib/types/academy';
+import { evaluateCourseSchedule } from '$lib/utils/schedule';
 
 function getSessionUser(cookies: any): EmployeeUser | null {
 	try {
@@ -207,6 +208,8 @@ export const load: PageServerLoad = async ({ params, parent, cookies }) => {
 	}
 
 	const enroll = enrollRows[0];
+	const postTestAttempts = Number(enroll.post_test_attempts || 0);
+
 	enrollment = {
 		id: enroll.id,
 		courseId: enroll.course_id,
@@ -218,15 +221,48 @@ export const load: PageServerLoad = async ({ params, parent, cookies }) => {
 		totalModulesCount: Number(enroll.total_modules_count || course.modules.length),
 		preTestScore: enroll.pre_test_score !== null ? Number(enroll.pre_test_score) : null,
 		postTestScore: enroll.post_test_score !== null ? Number(enroll.post_test_score) : null,
+		postTestAttempts,
 		enrolledAt: enroll.enrolled_at ? enroll.enrolled_at.toISOString() : '',
 		completedAt: enroll.completed_at ? enroll.completed_at.toISOString() : '',
 		hasCertificate: Boolean(enroll.has_certificate),
 		certificateNumber: enroll.certificate_number
 	};
 
+	// 4. Ambil jadwal pelatihan resmi peserta (hris.lms_session_attendances + hris.lms_sessions)
+	let matchedSession: any = null;
+	try {
+		const sRows = await sql`
+			SELECT 
+				s.id as session_id,
+				s.course_id,
+				s.title as session_title,
+				s.session_date,
+				s.start_time,
+				s.end_time,
+				s.session_type,
+				s.location_or_link,
+				s.trainer,
+				s.status as session_status
+			FROM hris.lms_session_attendances a
+			JOIN hris.lms_sessions s ON s.id = a.session_id
+			WHERE UPPER(TRIM(a.payroll_id)) = ${userPayrollId} AND s.course_id = ${params.id}
+			ORDER BY s.session_date DESC, s.start_time DESC
+			LIMIT 1;
+		`;
+		if (sRows && sRows.length > 0) {
+			matchedSession = sRows[0];
+		}
+	} catch (sErr) {
+		console.error('Error querying session for course player:', sErr);
+	}
+
+	const schedule = evaluateCourseSchedule(matchedSession, enroll.status);
+	const isCompleted = enroll.status === 'COMPLETED' || Boolean(enroll.has_certificate);
+	const isLocked = !isCompleted && schedule.isLocked;
+
+	// 5. Cek apakah sertifikat resmi sudah terbit
 	let hasActiveCertificate = false;
 	try {
-		// Ambil sertifikat jika ada
 		const certRows = await sql`
 			SELECT * FROM hris.lms_certificates
 			WHERE course_id = ${params.id} AND UPPER(TRIM(payroll_id)) = ${userPayrollId}
@@ -256,10 +292,26 @@ export const load: PageServerLoad = async ({ params, parent, cookies }) => {
 		console.error('Error loading certificate:', err);
 	}
 
-	// 4. Tentukan Step Awal secara Cerdas Berdasarkan Progres Riil
-	if (certificate || enrollment?.status === 'COMPLETED') {
+	// 6. Cek apakah Evaluasi Level 1 sudah pernah disubmit
+	let isEvaluationSubmitted = false;
+	try {
+		const evalRows = await sql`
+			SELECT id FROM hris.lms_evaluations_l1
+			WHERE course_id = ${params.id} AND UPPER(TRIM(payroll_id)) = ${userPayrollId}
+			LIMIT 1;
+		`;
+		isEvaluationSubmitted = evalRows.length > 0;
+	} catch (evErr) {
+		console.error('Error checking evaluation submitted:', evErr);
+	}
+
+	const isCompletedFinal = isCompleted || isEvaluationSubmitted || Boolean(certificate);
+	const isPostTestLocked = postTestAttempts >= 2;
+
+	// 7. Tentukan Step Awal secara Cerdas Berdasarkan Progres Riil
+	if (isCompletedFinal || certificate) {
 		initialStep = 5;
-	} else if (enrollment?.postTestScore !== null && enrollment?.postTestScore >= 75) {
+	} else if (isPostTestLocked || (enrollment?.postTestScore !== null && enrollment?.postTestScore >= (course.passingGrade || 75))) {
 		initialStep = 4;
 	} else if (enrollment?.preTestScore !== null && enrollment?.completedModulesCount >= course.modules.length) {
 		initialStep = 3;
@@ -272,6 +324,12 @@ export const load: PageServerLoad = async ({ params, parent, cookies }) => {
 	return {
 		course,
 		enrollment,
+		schedule,
+		isLocked,
+		postTestAttempts,
+		isPostTestLocked,
+		isEvaluationSubmitted,
+		isCompletedFinal,
 		preTestQuestions,
 		postTestQuestions,
 		certificate,
@@ -295,7 +353,7 @@ export const actions = {
 		const payrollId = (user.payrollId || '').toUpperCase().trim();
 
 		const checkEnroll = await sql`
-			SELECT id FROM hris.lms_enrollments
+			SELECT id, pre_test_score FROM hris.lms_enrollments
 			WHERE course_id = ${courseId} AND UPPER(TRIM(payroll_id)) = ${payrollId}
 			LIMIT 1;
 		`;
@@ -304,6 +362,15 @@ export const actions = {
 				success: false,
 				actionType: 'PRE_TEST',
 				message: 'Akses Ditolak: Anda belum terdaftar pada pelatihan ini.'
+			};
+		}
+
+		if (checkEnroll[0].pre_test_score !== null) {
+			return {
+				success: false,
+				actionType: 'PRE_TEST',
+				step: 2,
+				message: 'Pre-Test hanya dapat dikerjakan satu kali dan tidak dapat diulang. Silakan lanjutkan mempelajari materi modul.'
 			};
 		}
 
@@ -422,7 +489,7 @@ export const actions = {
 		const payrollId = (user.payrollId || '').toUpperCase().trim();
 
 		const checkEnroll = await sql`
-			SELECT id FROM hris.lms_enrollments
+			SELECT id, post_test_attempts, post_test_score FROM hris.lms_enrollments
 			WHERE course_id = ${courseId} AND UPPER(TRIM(payroll_id)) = ${payrollId}
 			LIMIT 1;
 		`;
@@ -433,6 +500,22 @@ export const actions = {
 				message: 'Akses Ditolak: Anda belum terdaftar pada pelatihan ini.'
 			};
 		}
+
+		const currentAttempts = Number(checkEnroll[0].post_test_attempts || 0);
+		if (currentAttempts >= 2) {
+			return {
+				success: false,
+				actionType: 'POST_TEST',
+				isLocked: true,
+				step: 4,
+				postTestAttempts: currentAttempts,
+				remainingAttempts: 0,
+				canRetry: false,
+				message: 'Batas maksimal 2 kali percobaan Post-Test telah tercapai. Anda tidak dapat mengulang tes ini lagi. Silakan lanjutkan ke pengisian Evaluasi.'
+			};
+		}
+
+		const newAttempts = currentAttempts + 1;
 
 		let questions: any[] = [];
 		try {
@@ -517,11 +600,15 @@ export const actions = {
 			await sql`
 				UPDATE hris.lms_enrollments
 				SET 
+					post_test_attempts = ${newAttempts},
 					post_test_score = GREATEST(COALESCE(post_test_score, 0), ${score}),
 					progress_percent = ${isPassed ? 100 : (hasActiveCert ? 100 : 70)},
 					certificate_number = COALESCE(certificate_number, ${activeCertNumber || null})
 				WHERE course_id = ${courseId} AND UPPER(TRIM(payroll_id)) = ${payrollId};
 			`;
+
+			const canRetry = newAttempts < 2 && !isPassed;
+			const remainingAttempts = Math.max(0, 2 - newAttempts);
 
 			return {
 				success: true,
@@ -535,12 +622,17 @@ export const actions = {
 				hasActiveCert,
 				activeCertNumber,
 				activeCertValidUntil,
-				step: isPassed ? 4 : 3,
+				postTestAttempts: newAttempts,
+				remainingAttempts,
+				canRetry,
+				step: isPassed || newAttempts >= 2 ? 4 : 3,
 				message: isPassed
 					? (hasActiveCert
 						? `Selamat! Anda Lulus Post-Test dengan Nilai ${score}/100. Sertifikat resmi Anda (#${activeCertNumber}) tetap aktif dan nilainya diperbarui.`
 						: `Selamat! Anda Lulus Post-Test dengan Nilai ${score}/100 (Passing Grade: ${passingGrade}).`)
-					: `Nilai Anda ${score}/100 (Belum mencapai batas kelulusan ${passingGrade}).`
+					: (canRetry
+						? `Nilai Anda ${score}/100 (Passing Grade: ${passingGrade}). Anda masih memiliki 1x kesempatan remedial. Anda dapat meninjau materi kembali di Bab Belajar sebelum mencoba lagi.`
+						: `Nilai Anda ${score}/100. Batas 2 kali percobaan telah selesai digunakan. Silakan lanjutkan ke pengisian evaluasi pelatihan.`)
 			};
 		} catch (err: any) {
 			return {
@@ -575,6 +667,21 @@ export const actions = {
 				success: false,
 				actionType: 'EVALUATION_L1',
 				message: 'Akses Ditolak: Anda belum terdaftar pada pelatihan ini.'
+			};
+		}
+
+		// Cek apakah Evaluasi sudah pernah disubmit sebelumnya
+		const checkExistingEval = await sql`
+			SELECT id FROM hris.lms_evaluations_l1
+			WHERE course_id = ${courseId} AND UPPER(TRIM(payroll_id)) = ${payrollId}
+			LIMIT 1;
+		`;
+		if (checkExistingEval.length > 0) {
+			return {
+				success: false,
+				actionType: 'EVALUATION_L1',
+				step: 5,
+				message: 'Evaluasi telah berhasil dikirim sebelumnya. Formulir evaluasi tidak dapat diisi ulang untuk pelatihan yang sama.'
 			};
 		}
 

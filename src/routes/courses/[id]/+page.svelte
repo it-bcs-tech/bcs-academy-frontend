@@ -156,6 +156,22 @@
 	let showComparisonModal = $state(false);
 	let isPostTestSubmitted = $state(data.enrollment?.postTestScore !== null);
 
+	// State Percobaan Post-Test & Status Evaluasi
+	let attemptsCount = $derived(
+		form?.actionType === 'POST_TEST' && typeof form.postTestAttempts === 'number'
+			? form.postTestAttempts
+			: (data.postTestAttempts ?? data.enrollment?.postTestAttempts ?? 0)
+	);
+	let isRetryingPostTest = $state(false);
+	let isEvaluationSubmitted = $derived(
+		form?.actionType === 'EVALUATION_L1' && form?.success
+			? true
+			: Boolean(data.isEvaluationSubmitted)
+	);
+	let isCompletedFinal = $derived(
+		Boolean(data.isCompletedFinal) || Boolean(activeCert) || isEvaluationSubmitted || data.enrollment?.status === 'COMPLETED'
+	);
+
 	let preScoreVal = $derived(
 		form?.actionType === 'POST_TEST' && typeof form.preTestScore === 'number'
 			? form.preTestScore
@@ -194,6 +210,7 @@
 			if (form.actionType === 'POST_TEST') {
 				showComparisonModal = true;
 				isPostTestSubmitted = true;
+				isRetryingPostTest = false;
 				if (form.hasActiveCert && activeCert) {
 					activeCert.score = Math.max(Number(activeCert.score) || 0, form.score);
 				}
@@ -249,87 +266,168 @@
 		</div>
 	</div>
 
-	<!-- ════════════════════════════════════════════════════════════════════════ -->
-	<!-- STEPPER HEADER 5 TAHAP                                                   -->
-	<!-- ════════════════════════════════════════════════════════════════════════ -->
-	<div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-4 shadow-xs">
-		<div class="grid grid-cols-2 sm:grid-cols-5 gap-2">
-			<!-- Step 1 -->
-			<button
-				type="button"
-				onclick={() => { if (currentStep > 1) currentStep = 1; }}
-				class="flex items-center gap-2 p-2.5 rounded-2xl text-left transition-all {currentStep === 1 ? 'bg-indigo-600 text-white shadow-md font-black' : currentStep > 1 ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/40' : 'text-slate-400 opacity-60'}"
-			>
-				<span class="material-symbols-outlined text-xl {currentStep > 1 ? 'text-emerald-600 dark:text-emerald-400' : ''}">
-					{currentStep > 1 ? 'check_circle' : 'assignment'}
+	{#if data.isLocked}
+		<!-- ════════════════════════════════════════════════════════════════════════ -->
+		<!-- TAMPILAN TERKUNCI: MENUNGGU JADWAL / COUNTDOWN JADWAL                    -->
+		<!-- ════════════════════════════════════════════════════════════════════════ -->
+		<div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-8 md:p-12 shadow-xl text-center space-y-6">
+			<div class="w-20 h-20 rounded-3xl bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-300 dark:border-amber-800 flex items-center justify-center mx-auto shadow-inner">
+				<span class="material-symbols-outlined text-4xl">
+					{data.schedule?.hasSchedule ? 'schedule' : 'hourglass_empty'}
 				</span>
-				<div class="min-w-0">
-					<p class="text-[10px] uppercase font-bold tracking-wider opacity-80">Tahap 1</p>
-					<p class="text-xs truncate font-bold">Pre-Test</p>
-				</div>
-			</button>
+			</div>
 
-			<!-- Step 2 -->
-			<button
-				type="button"
-				onclick={() => (currentStep = 2)}
-				class="flex items-center gap-2 p-2.5 rounded-2xl text-left transition-all cursor-pointer {currentStep === 2 ? 'bg-indigo-600 text-white shadow-md font-black' : currentStep > 2 ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/40' : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white'}"
-			>
-				<span class="material-symbols-outlined text-xl {currentStep > 2 ? 'text-emerald-600 dark:text-emerald-400' : ''}">
-					{currentStep > 2 ? 'check_circle' : 'play_lesson'}
+			<div class="max-w-lg mx-auto space-y-3">
+				<span class="px-3 py-1 rounded-full text-xs font-black uppercase tracking-wider {data.schedule?.hasSchedule ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300' : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300'}">
+					{data.schedule?.hasSchedule ? 'Jadwal Pelatihan Ditetapkan' : 'Menunggu Jadwal Pelatihan'}
 				</span>
-				<div class="min-w-0">
-					<p class="text-[10px] uppercase font-bold tracking-wider opacity-80">Tahap 2</p>
-					<p class="text-xs truncate font-bold">Modul Materi</p>
-				</div>
-			</button>
 
-			<!-- Step 3 -->
-			<button
-				type="button"
-				onclick={() => { if (currentStep >= 3) currentStep = 3; }}
-				class="flex items-center gap-2 p-2.5 rounded-2xl text-left transition-all {currentStep === 3 ? 'bg-indigo-600 text-white shadow-md font-black' : currentStep > 3 ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/40' : 'text-slate-400 opacity-60'}"
-			>
-				<span class="material-symbols-outlined text-xl {currentStep > 3 ? 'text-emerald-600 dark:text-emerald-400' : ''}">
-					{currentStep > 3 ? 'check_circle' : 'quiz'}
-				</span>
-				<div class="min-w-0">
-					<p class="text-[10px] uppercase font-bold tracking-wider opacity-80">Tahap 3</p>
-					<p class="text-xs truncate font-bold">Post-Test</p>
-				</div>
-			</button>
+				<h2 class="text-2xl md:text-3xl font-black text-slate-900 dark:text-white tracking-tight">
+					{#if data.schedule?.hasSchedule}
+						Pelatihan Dimulai Dalam: <br/>
+						<span class="text-amber-600 dark:text-amber-400 font-mono mt-1 inline-block">{data.schedule.countdownText}</span>
+					{:else}
+						Menunggu Jadwal Pelatihan Resmi
+					{/if}
+				</h2>
 
-			<!-- Step 4 -->
-			<button
-				type="button"
-				onclick={() => { if (currentStep >= 4) currentStep = 4; }}
-				class="flex items-center gap-2 p-2.5 rounded-2xl text-left transition-all {currentStep === 4 ? 'bg-indigo-600 text-white shadow-md font-black' : currentStep > 4 ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/40' : 'text-slate-400 opacity-60'}"
-			>
-				<span class="material-symbols-outlined text-xl {currentStep > 4 ? 'text-emerald-600 dark:text-emerald-400' : ''}">
-					{currentStep > 4 ? 'check_circle' : 'rate_review'}
-				</span>
-				<div class="min-w-0">
-					<p class="text-[10px] uppercase font-bold tracking-wider opacity-80">Tahap 4</p>
-					<p class="text-xs truncate font-bold">Evaluasi L1</p>
-				</div>
-			</button>
+				<p class="text-xs md:text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
+					{#if data.schedule?.hasSchedule}
+						Sesi pembelajaran untuk <strong>{course.title}</strong> dijadwalkan pada <strong>{data.schedule.formattedDate}</strong> ({data.schedule.sessionType}) bersama <strong>{data.schedule.trainer}</strong>. Akses modul pembelajaran dan ujian akan terbuka otomatis begitu jadwal pelatihan dimulai.
+					{:else}
+						Anda telah terdaftar pada pelatihan <strong>{course.title}</strong>. Saat ini modul belum dapat diakses karena masih menunggu penetapan jadwal sesi resmi dari Tim Human Capital / Training & Development PT BCS.
+					{/if}
+				</p>
+			</div>
 
-			<!-- Step 5 -->
-			<button
-				type="button"
-				onclick={() => { if (currentStep === 5 || activeCert) currentStep = 5; }}
-				class="col-span-2 sm:col-span-1 flex items-center gap-2 p-2.5 rounded-2xl text-left transition-all {currentStep === 5 ? 'bg-emerald-600 text-white shadow-md font-black' : activeCert ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/40' : 'text-slate-400 opacity-60'}"
-			>
-				<span class="material-symbols-outlined text-xl">
-					{activeCert ? 'verified' : 'workspace_premium'}
-				</span>
-				<div class="min-w-0">
-					<p class="text-[10px] uppercase font-bold tracking-wider opacity-80">Tahap 5</p>
-					<p class="text-xs truncate font-bold">E-Sertifikat</p>
+			{#if data.schedule?.hasSchedule}
+				<div class="max-w-md mx-auto p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-xs text-left grid grid-cols-2 gap-3">
+					<div>
+						<span class="text-[10px] uppercase font-bold text-slate-400">Tanggal Pelatihan</span>
+						<p class="font-bold text-slate-800 dark:text-slate-200 mt-0.5">{data.schedule.sessionDate}</p>
+					</div>
+					<div>
+						<span class="text-[10px] uppercase font-bold text-slate-400">Jam Mulai</span>
+						<p class="font-bold text-slate-800 dark:text-slate-200 mt-0.5">{data.schedule.startTime} WIB</p>
+					</div>
+					<div>
+						<span class="text-[10px] uppercase font-bold text-slate-400">Metode Sesi</span>
+						<p class="font-bold text-slate-800 dark:text-slate-200 mt-0.5">{data.schedule.sessionType}</p>
+					</div>
+					<div>
+						<span class="text-[10px] uppercase font-bold text-slate-400">Instruktur</span>
+						<p class="font-bold text-slate-800 dark:text-slate-200 mt-0.5 truncate">{data.schedule.trainer}</p>
+					</div>
 				</div>
-			</button>
+			{/if}
+
+			<div class="pt-2 flex items-center justify-center gap-3">
+				<a 
+					href="/" 
+					class="inline-flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-bold transition-all"
+				>
+					<span class="material-symbols-outlined text-sm">home</span>
+					<span>Kembali ke Beranda</span>
+				</a>
+				<a 
+					href="/catalog" 
+					class="inline-flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition-all shadow-sm"
+				>
+					<span class="material-symbols-outlined text-sm">menu_book</span>
+					<span>Lihat Katalog Lainnya</span>
+				</a>
+			</div>
 		</div>
-	</div>
+	{:else}
+		<!-- ════════════════════════════════════════════════════════════════════════ -->
+		<!-- STEPPER HEADER 5 TAHAP                                                   -->
+		<!-- ════════════════════════════════════════════════════════════════════════ -->
+		<div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-4 shadow-xs">
+			<div class="grid grid-cols-2 sm:grid-cols-5 gap-2">
+				<!-- Step 1: Pre-Test -->
+				<button
+					type="button"
+					disabled={isCompletedFinal || data.enrollment?.preTestScore !== null}
+					onclick={() => { if (!isCompletedFinal && data.enrollment?.preTestScore === null && currentStep > 1) currentStep = 1; }}
+					class="flex items-center gap-2 p-2.5 rounded-2xl text-left transition-all {currentStep === 1 ? 'bg-indigo-600 text-white shadow-md font-black' : (data.enrollment?.preTestScore !== null || currentStep > 1) ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/40' : 'text-slate-400 opacity-60'} {(isCompletedFinal || data.enrollment?.preTestScore !== null) ? 'cursor-default' : 'cursor-pointer'}"
+					title={data.enrollment?.preTestScore !== null ? `Pre-Test Selesai (${data.enrollment.preTestScore}/100) - Tidak dapat diulang` : 'Tahap 1: Pre-Test'}
+				>
+					<span class="material-symbols-outlined text-xl {data.enrollment?.preTestScore !== null || currentStep > 1 ? 'text-emerald-600 dark:text-emerald-400' : ''}">
+						{data.enrollment?.preTestScore !== null || currentStep > 1 ? 'check_circle' : 'assignment'}
+					</span>
+					<div class="min-w-0">
+						<p class="text-[10px] uppercase font-bold tracking-wider opacity-80">Tahap 1</p>
+						<p class="text-xs truncate font-bold">Pre-Test</p>
+					</div>
+				</button>
+
+				<!-- Step 2: Modul Materi (Bebas dibuka kapan saja) -->
+				<button
+					type="button"
+					onclick={() => (currentStep = 2)}
+					class="flex items-center gap-2 p-2.5 rounded-2xl text-left transition-all cursor-pointer {currentStep === 2 ? 'bg-indigo-600 text-white shadow-md font-black' : currentStep > 2 ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/40' : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white'}"
+					title="Tahap 2: Modul Pembelajaran (Dapat dibuka & ditinjau kapan saja)"
+				>
+					<span class="material-symbols-outlined text-xl {currentStep > 2 ? 'text-emerald-600 dark:text-emerald-400' : ''}">
+						{currentStep > 2 ? 'check_circle' : 'play_lesson'}
+					</span>
+					<div class="min-w-0">
+						<p class="text-[10px] uppercase font-bold tracking-wider opacity-80">Tahap 2</p>
+						<p class="text-xs truncate font-bold">Modul Materi</p>
+					</div>
+				</button>
+
+				<!-- Step 3: Post-Test (Terkunci jika isCompletedFinal) -->
+				<button
+					type="button"
+					disabled={isCompletedFinal}
+					onclick={() => { if (!isCompletedFinal && (currentStep >= 3 || (data.enrollment?.completedModulesCount || 0) >= course.modules.length)) currentStep = 3; }}
+					class="flex items-center gap-2 p-2.5 rounded-2xl text-left transition-all {currentStep === 3 ? 'bg-indigo-600 text-white shadow-md font-black' : currentStep > 3 ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/40' : 'text-slate-400 opacity-60'} {isCompletedFinal ? 'cursor-default' : 'cursor-pointer'}"
+					title={isCompletedFinal ? 'Pelatihan telah selesai - Post-test terkunci' : 'Tahap 3: Post-Test'}
+				>
+					<span class="material-symbols-outlined text-xl {currentStep > 3 ? 'text-emerald-600 dark:text-emerald-400' : ''}">
+						{currentStep > 3 ? 'check_circle' : 'quiz'}
+					</span>
+					<div class="min-w-0">
+						<p class="text-[10px] uppercase font-bold tracking-wider opacity-80">Tahap 3</p>
+						<p class="text-xs truncate font-bold">Post-Test</p>
+					</div>
+				</button>
+
+				<!-- Step 4: Evaluasi L1 (Terkunci jika isCompletedFinal / isEvaluationSubmitted) -->
+				<button
+					type="button"
+					disabled={isCompletedFinal || isEvaluationSubmitted}
+					onclick={() => { if (!isCompletedFinal && !isEvaluationSubmitted && currentStep >= 4) currentStep = 4; }}
+					class="flex items-center gap-2 p-2.5 rounded-2xl text-left transition-all {currentStep === 4 ? 'bg-indigo-600 text-white shadow-md font-black' : (isEvaluationSubmitted || currentStep > 4) ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/40' : 'text-slate-400 opacity-60'} {(isCompletedFinal || isEvaluationSubmitted) ? 'cursor-default' : 'cursor-pointer'}"
+					title={isEvaluationSubmitted ? 'Evaluasi telah dikirim - Formulir terkunci' : 'Tahap 4: Evaluasi Kirkpatrick Level 1'}
+				>
+					<span class="material-symbols-outlined text-xl {isEvaluationSubmitted || currentStep > 4 ? 'text-emerald-600 dark:text-emerald-400' : ''}">
+						{isEvaluationSubmitted || currentStep > 4 ? 'check_circle' : 'rate_review'}
+					</span>
+					<div class="min-w-0">
+						<p class="text-[10px] uppercase font-bold tracking-wider opacity-80">Tahap 4</p>
+						<p class="text-xs truncate font-bold">Evaluasi L1</p>
+					</div>
+				</button>
+
+				<!-- Step 5: E-Sertifikat -->
+				<button
+					type="button"
+					onclick={() => { if (currentStep === 5 || activeCert || isCompletedFinal) currentStep = 5; }}
+					class="col-span-2 sm:col-span-1 flex items-center gap-2 p-2.5 rounded-2xl text-left transition-all cursor-pointer {currentStep === 5 ? 'bg-emerald-600 text-white shadow-md font-black' : (activeCert || isCompletedFinal) ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/40' : 'text-slate-400 opacity-60'}"
+					title="Tahap 5: E-Sertifikat Kelulusan"
+				>
+					<span class="material-symbols-outlined text-xl">
+						{activeCert || isCompletedFinal ? 'verified' : 'workspace_premium'}
+					</span>
+					<div class="min-w-0">
+						<p class="text-[10px] uppercase font-bold tracking-wider opacity-80">Tahap 5</p>
+						<p class="text-xs truncate font-bold">E-Sertifikat</p>
+					</div>
+				</button>
+			</div>
+		</div>
 
 	<!-- ════════════════════════════════════════════════════════════════════════ -->
 	<!-- TAHAP 1: PRE-TEST (UJI BASELINE PEMAHAMAN AWAL)                          -->
@@ -352,82 +450,83 @@
 
 			<!-- Status jika sudah pernah submit -->
 			{#if data.enrollment?.preTestScore !== null}
-				<div class="p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-800/60 flex items-center justify-between">
+				<div class="p-6 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-800/60 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
 					<div class="flex items-center gap-3">
-						<span class="material-symbols-outlined text-2xl text-emerald-600 dark:text-emerald-400">check_circle</span>
+						<span class="material-symbols-outlined text-3xl text-emerald-600 dark:text-emerald-400 shrink-0">check_circle</span>
 						<div>
-							<p class="text-xs font-bold text-emerald-900 dark:text-emerald-200">Anda telah menyelesaikan Pre-Test sebelumnya</p>
-							<p class="text-[11px] text-emerald-700 dark:text-emerald-400">Nilai baseline tercatat: <strong>{data.enrollment.preTestScore}/100</strong></p>
+							<p class="text-sm font-bold text-emerald-900 dark:text-emerald-200">Pre-Test Telah Selesai Dikerjakan</p>
+							<p class="text-xs text-emerald-700 dark:text-emerald-400 mt-0.5">Nilai baseline pemahaman awal Anda tercatat: <strong>{data.enrollment.preTestScore}/100</strong>. Pre-test hanya dapat dikerjakan 1 kali dan tidak dapat diulang.</p>
 						</div>
 					</div>
 					<button
 						type="button"
 						onclick={() => (currentStep = 2)}
-						class="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-all shadow-xs cursor-pointer"
+						class="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-black transition-all shadow cursor-pointer flex items-center gap-1.5 shrink-0 self-start sm:self-auto"
 					>
-						Lanjut ke Modul Materi &rarr;
-					</button>
-				</div>
-			{/if}
-
-			<!-- Form Soal-Soal Pre-Test -->
-			<form
-				method="POST"
-				action="?/submitPreTest"
-				use:enhance={() => {
-					isSubmitting = true;
-					return async ({ update }) => {
-						await update();
-						isSubmitting = false;
-					};
-				}}
-				class="space-y-6"
-			>
-				<div class="space-y-5">
-					{#each preTestQuestions as q, idx}
-						<div class="p-5 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-800 space-y-3">
-							<div class="flex items-start gap-3">
-								<span class="w-6 h-6 rounded-lg bg-indigo-600 text-white text-xs font-black flex items-center justify-center shrink-0">
-									{idx + 1}
-								</span>
-								<p class="text-xs sm:text-sm font-bold text-slate-900 dark:text-white leading-relaxed">
-									{q.questionText}
-								</p>
-							</div>
-
-							<div class="space-y-2 pl-9">
-								{#each q.options as opt}
-									<label class="flex items-center gap-3 p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 hover:border-indigo-400 dark:hover:border-indigo-500 transition-all cursor-pointer">
-										<input
-											type="radio"
-											name="pre_{q.id}"
-											value={opt.key}
-											bind:group={preAnswers[q.id]}
-											required
-											class="w-4 h-4 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
-										/>
-										<span class="text-xs text-slate-800 dark:text-slate-200 font-medium">
-											<strong class="font-bold text-indigo-600 dark:text-indigo-400">{opt.key}.</strong> {opt.text}
-										</span>
-									</label>
-								{/each}
-							</div>
-						</div>
-					{/each}
-				</div>
-
-				<div class="flex items-center justify-between pt-4 border-t border-slate-200 dark:border-slate-800">
-					<p class="text-xs text-slate-400">Total {preTestQuestions.length} Pertanyaan Baseline</p>
-					<button
-						type="submit"
-						disabled={isSubmitting}
-						class="px-6 py-3 rounded-2xl bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 text-white font-black text-xs shadow-lg shadow-indigo-600/30 transition-all cursor-pointer flex items-center gap-2 disabled:opacity-50"
-					>
-						<span>{isSubmitting ? 'Mengirim Jawaban...' : 'Kirim Jawaban Pre-Test & Buka Modul'}</span>
+						<span>Lanjut ke Modul Materi</span>
 						<span class="material-symbols-outlined text-sm">arrow_forward</span>
 					</button>
 				</div>
-			</form>
+			{:else}
+				<!-- Form Soal-Soal Pre-Test -->
+				<form
+					method="POST"
+					action="?/submitPreTest"
+					use:enhance={() => {
+						isSubmitting = true;
+						return async ({ update }) => {
+							await update();
+							isSubmitting = false;
+						};
+					}}
+					class="space-y-6"
+				>
+					<div class="space-y-5">
+						{#each preTestQuestions as q, idx}
+							<div class="p-5 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-800 space-y-3">
+								<div class="flex items-start gap-3">
+									<span class="w-6 h-6 rounded-lg bg-indigo-600 text-white text-xs font-black flex items-center justify-center shrink-0">
+										{idx + 1}
+									</span>
+									<p class="text-xs sm:text-sm font-bold text-slate-900 dark:text-white leading-relaxed">
+										{q.questionText}
+									</p>
+								</div>
+
+								<div class="space-y-2 pl-9">
+									{#each q.options as opt}
+										<label class="flex items-center gap-3 p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 hover:border-indigo-400 dark:hover:border-indigo-500 transition-all cursor-pointer">
+											<input
+												type="radio"
+												name="pre_{q.id}"
+												value={opt.key}
+												bind:group={preAnswers[q.id]}
+												required
+												class="w-4 h-4 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+											/>
+											<span class="text-xs text-slate-800 dark:text-slate-200 font-medium">
+												<strong class="font-bold text-indigo-600 dark:text-indigo-400">{opt.key}.</strong> {opt.text}
+											</span>
+										</label>
+									{/each}
+								</div>
+							</div>
+						{/each}
+					</div>
+
+					<div class="flex items-center justify-between pt-4 border-t border-slate-200 dark:border-slate-800">
+						<p class="text-xs text-slate-400">Total {preTestQuestions.length} Pertanyaan Baseline</p>
+						<button
+							type="submit"
+							disabled={isSubmitting}
+							class="px-6 py-3 rounded-2xl bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 text-white font-black text-xs shadow-lg shadow-indigo-600/30 transition-all cursor-pointer flex items-center gap-2 disabled:opacity-50"
+						>
+							<span>{isSubmitting ? 'Mengirim Jawaban...' : 'Kirim Jawaban Pre-Test & Buka Modul'}</span>
+							<span class="material-symbols-outlined text-sm">arrow_forward</span>
+						</button>
+					</div>
+				</form>
+			{/if}
 		</div>
 
 	<!-- ════════════════════════════════════════════════════════════════════════ -->
@@ -669,118 +768,185 @@
 				</p>
 			</div>
 
-			<!-- Banner Kunci Jawaban jika Post-Test sudah dikirim -->
-			{#if isPostTestSubmitted}
-				<div class="p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-800/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-					<div class="flex items-center gap-3">
-						<span class="material-symbols-outlined text-amber-600 text-2xl shrink-0">lock</span>
-						<div>
-							<h4 class="font-bold text-xs sm:text-sm text-slate-900 dark:text-white">Jawaban Post-Test Terkunci</h4>
-							<p class="text-[11px] text-slate-600 dark:text-slate-300">
-								Jawaban telah tersimpan permanen di sistem LMS. Nilai riil Anda: <strong>{postScoreVal}/100</strong> {isTestPassed ? '(Lulus)' : '(Belum Memenuhi Passing Grade)'}.
-							</p>
+			<!-- Indikator Percobaan Post-Test & Status Terkunci -->
+			{#if attemptsCount >= 2}
+				<div class="p-5 rounded-2xl bg-rose-50 dark:bg-rose-950/30 border border-rose-300 dark:border-rose-800/60 space-y-3">
+					<div class="flex items-start justify-between gap-3">
+						<div class="flex items-center gap-3">
+							<span class="material-symbols-outlined text-rose-600 dark:text-rose-400 text-3xl shrink-0">lock</span>
+							<div>
+								<h4 class="font-bold text-sm text-slate-900 dark:text-white">Post-Test Terkunci Permanen</h4>
+								<p class="text-xs text-slate-600 dark:text-slate-300 mt-0.5">
+									Anda telah menggunakan batas maksimal <strong>2 kali kesempatan</strong> pengerjaan Post-Test. Nilai akhir tertinggi Anda: <strong>{postScoreVal}/100</strong>. Anda tidak dapat mengulang tes ini lagi.
+								</p>
+							</div>
+						</div>
+						<span class="px-3 py-1 rounded-full text-[10px] font-black uppercase bg-rose-200 dark:bg-rose-900 text-rose-900 dark:text-rose-200 shrink-0">
+							2 dari 2 Percobaan
+						</span>
+					</div>
+
+					<div class="pt-2 flex flex-wrap items-center justify-between gap-2 border-t border-rose-200 dark:border-rose-900/60">
+						<button
+							type="button"
+							onclick={() => (currentStep = 2)}
+							class="px-4 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-50 flex items-center gap-1.5 cursor-pointer shadow-xs"
+						>
+							<span class="material-symbols-outlined text-sm">menu_book</span>
+							<span>Lihat Materi Modul</span>
+						</button>
+						<div class="flex items-center gap-2">
+							<button
+								type="button"
+								onclick={() => (showComparisonModal = true)}
+								class="px-4 py-2 rounded-xl bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+							>
+								<span class="material-symbols-outlined text-sm">analytics</span>
+								<span>Hasil Komparasi</span>
+							</button>
+							<button
+								type="button"
+								onclick={() => (currentStep = 4)}
+								class="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-black flex items-center gap-1.5 cursor-pointer shadow"
+							>
+								<span>Lanjut ke Evaluasi &rarr;</span>
+							</button>
 						</div>
 					</div>
-					<button
-						type="button"
-						onclick={() => (showComparisonModal = true)}
-						class="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold transition-all shadow cursor-pointer flex items-center gap-1.5 shrink-0 self-start sm:self-auto"
-					>
-						<span class="material-symbols-outlined text-base">analytics</span>
-						<span>Lihat Komparasi Nilai</span>
-					</button>
+				</div>
+			{:else if attemptsCount === 1 && !isRetryingPostTest}
+				<div class="p-5 rounded-2xl bg-amber-50 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-800/60 space-y-3">
+					<div class="flex items-start justify-between gap-3">
+						<div class="flex items-center gap-3">
+							<span class="material-symbols-outlined text-amber-600 text-3xl shrink-0">history_edu</span>
+							<div>
+								<h4 class="font-bold text-sm text-slate-900 dark:text-white">Hasil Percobaan Pertama: {postScoreVal}/100</h4>
+								<p class="text-xs text-slate-600 dark:text-slate-300 mt-0.5">
+									{isTestPassed ? 'Selamat, Anda telah melampaui Passing Grade.' : 'Nilai belum mencapai Passing Grade (75).'}
+									Anda masih memiliki <strong>1 kali kesempatan remedial</strong> jika ingin memperbaiki nilai. Anda juga dapat membaca kembali materi di Bab Belajar sebelum mengulang.
+								</p>
+							</div>
+						</div>
+						<span class="px-3 py-1 rounded-full text-[10px] font-black uppercase bg-amber-200 dark:bg-amber-900 text-amber-900 dark:text-amber-200 shrink-0">
+							Percobaan 1 dari 2
+						</span>
+					</div>
+
+					<div class="pt-2 flex flex-wrap items-center gap-2 border-t border-amber-200 dark:border-amber-900/60">
+						<button
+							type="button"
+							onclick={() => (currentStep = 2)}
+							class="px-4 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-50 flex items-center gap-1.5 cursor-pointer shadow-xs"
+						>
+							<span class="material-symbols-outlined text-sm">menu_book</span>
+							<span>Tinjau & Pelajari Lagi Materi</span>
+						</button>
+						<button
+							type="button"
+							onclick={() => {
+								isRetryingPostTest = true;
+								postAnswers = {};
+							}}
+							class="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-xs font-black flex items-center gap-1.5 cursor-pointer shadow"
+						>
+							<span class="material-symbols-outlined text-sm">refresh</span>
+							<span>Ulangi Post-Test Sekarang (Sisa 1x)</span>
+						</button>
+						<button
+							type="button"
+							onclick={() => (currentStep = 4)}
+							class="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-black flex items-center gap-1.5 cursor-pointer shadow ml-auto"
+						>
+							<span>Lanjut ke Evaluasi &rarr;</span>
+						</button>
+					</div>
 				</div>
 			{/if}
 
-			<!-- Form Soal-Soal Post-Test -->
-			<form
-				method="POST"
-				action="?/submitPostTest"
-				use:enhance={() => {
-					isSubmitting = true;
-					return async ({ update }) => {
-						await update();
-						isSubmitting = false;
-					};
-				}}
-				class="space-y-6"
-			>
-				<div class="space-y-5">
-					{#each postTestQuestions as q, idx}
-						<div class="p-5 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-800 space-y-3">
-							<div class="flex items-start gap-3">
-								<span class="w-6 h-6 rounded-lg bg-amber-600 text-white text-xs font-black flex items-center justify-center shrink-0">
-									{idx + 1}
-								</span>
-								<p class="text-xs sm:text-sm font-bold text-slate-900 dark:text-white leading-relaxed">
-									{q.questionText}
-								</p>
-							</div>
-
-							<div class="space-y-2 pl-9">
-								{#each q.options as opt}
-									<label class="flex items-center gap-3 p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 hover:border-amber-400 dark:hover:border-amber-500 transition-all {isPostTestSubmitted ? 'cursor-not-allowed opacity-75' : 'cursor-pointer'}">
-										<input
-											type="radio"
-											name="post_{q.id}"
-											value={opt.key}
-											bind:group={postAnswers[q.id]}
-											disabled={isPostTestSubmitted || isSubmitting}
-											required
-											class="w-4 h-4 text-amber-600 focus:ring-amber-500 cursor-pointer disabled:cursor-not-allowed"
-										/>
-										<span class="text-xs text-slate-800 dark:text-slate-200 font-medium">
-											<strong class="font-bold text-amber-600 dark:text-amber-400">{opt.key}.</strong> {opt.text}
-										</span>
-									</label>
-								{/each}
-							</div>
+			{#if attemptsCount === 0 || isRetryingPostTest}
+				{#if isRetryingPostTest}
+					<div class="p-3.5 rounded-xl bg-amber-100 dark:bg-amber-950/50 border border-amber-300 dark:border-amber-700 flex items-center justify-between text-xs font-bold text-amber-900 dark:text-amber-200">
+						<div class="flex items-center gap-2">
+							<span class="material-symbols-outlined text-base">warning</span>
+							<span>Percobaan 2 dari 2: Ini adalah kesempatan terakhir Anda mengerjakan Post-Test.</span>
 						</div>
-					{/each}
-				</div>
+						<button
+							type="button"
+							onclick={() => (isRetryingPostTest = false)}
+							class="text-[11px] underline cursor-pointer"
+						>
+							Batalkan & Kembali
+						</button>
+					</div>
+				{/if}
 
-				<div class="flex items-center justify-between pt-4 border-t border-slate-200 dark:border-slate-800">
-					<button
-						type="button"
-						onclick={() => (currentStep = 2)}
-						class="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-100 cursor-pointer"
-					>
-						&larr; Kembali ke Materi
-					</button>
+				<!-- Form Soal-Soal Post-Test -->
+				<form
+					method="POST"
+					action="?/submitPostTest"
+					use:enhance={() => {
+						isSubmitting = true;
+						return async ({ update }) => {
+							await update();
+							isSubmitting = false;
+						};
+					}}
+					class="space-y-6"
+				>
+					<div class="space-y-5">
+						{#each postTestQuestions as q, idx}
+							<div class="p-5 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-800 space-y-3">
+								<div class="flex items-start gap-3">
+									<span class="w-6 h-6 rounded-lg bg-amber-600 text-white text-xs font-black flex items-center justify-center shrink-0">
+										{idx + 1}
+									</span>
+									<p class="text-xs sm:text-sm font-bold text-slate-900 dark:text-white leading-relaxed">
+										{q.questionText}
+									</p>
+								</div>
 
-					{#if !isPostTestSubmitted}
+								<div class="space-y-2 pl-9">
+									{#each q.options as opt}
+										<label class="flex items-center gap-3 p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 hover:border-amber-400 dark:hover:border-amber-500 transition-all cursor-pointer">
+											<input
+												type="radio"
+												name="post_{q.id}"
+												value={opt.key}
+												bind:group={postAnswers[q.id]}
+												disabled={isSubmitting}
+												required
+												class="w-4 h-4 text-amber-600 focus:ring-amber-500 cursor-pointer"
+											/>
+											<span class="text-xs text-slate-800 dark:text-slate-200 font-medium">
+												<strong class="font-bold text-amber-600 dark:text-amber-400">{opt.key}.</strong> {opt.text}
+											</span>
+										</label>
+									{/each}
+								</div>
+							</div>
+						{/each}
+					</div>
+
+					<div class="flex items-center justify-between pt-4 border-t border-slate-200 dark:border-slate-800">
+						<button
+							type="button"
+							onclick={() => (currentStep = 2)}
+							class="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-100 cursor-pointer"
+						>
+							&larr; Kembali ke Materi
+						</button>
+
 						<button
 							type="submit"
 							disabled={isSubmitting}
 							class="px-6 py-3 rounded-2xl bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white font-black text-xs shadow-lg shadow-amber-600/30 transition-all cursor-pointer flex items-center gap-2 disabled:opacity-50"
 						>
-							<span>{isSubmitting ? 'Memeriksa Jawaban...' : 'Kirim Jawaban Post-Test'}</span>
+							<span>{isSubmitting ? 'Memeriksa Jawaban...' : (isRetryingPostTest ? 'Kirim Jawaban Remedial (Percobaan 2)' : 'Kirim Jawaban Post-Test (Percobaan 1)')}</span>
 							<span class="material-symbols-outlined text-sm">verified</span>
 						</button>
-					{:else}
-						<div class="flex items-center gap-2">
-							<button
-								type="button"
-								onclick={() => (showComparisonModal = true)}
-								class="px-5 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs shadow transition-all cursor-pointer flex items-center gap-1.5"
-							>
-								<span class="material-symbols-outlined text-sm">analytics</span>
-								<span>Hasil Komparasi</span>
-							</button>
-							{#if isTestPassed}
-								<button
-									type="button"
-									onclick={() => (currentStep = 4)}
-									class="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow transition-all cursor-pointer flex items-center gap-1.5"
-								>
-									<span>Lanjut ke Evaluasi</span>
-									<span class="material-symbols-outlined text-sm">arrow_forward</span>
-								</button>
-							{/if}
-						</div>
-					{/if}
-				</div>
-			</form>
+					</div>
+				</form>
+			{/if}
 		</div>
 
 		<!-- POP-UP / MODAL KOMPARASI HASIL PRE-TEST VS POST-TEST -->
@@ -936,11 +1102,39 @@
 									showComparisonModal = false;
 									currentStep = 2;
 								}}
-								class="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-xs font-black shadow-lg shadow-amber-600/30 transition-all cursor-pointer flex items-center justify-center gap-1.5"
+								class="w-full sm:w-auto px-5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold hover:bg-slate-100 transition-all cursor-pointer flex items-center justify-center gap-1.5"
 							>
 								<span>Tinjau Materi Modul</span>
 								<span class="material-symbols-outlined text-sm">menu_book</span>
 							</button>
+
+							{#if attemptsCount < 2}
+								<button
+									type="button"
+									onclick={() => {
+										showComparisonModal = false;
+										isRetryingPostTest = true;
+										postAnswers = {};
+										currentStep = 3;
+									}}
+									class="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-xs font-black shadow-lg shadow-amber-600/30 transition-all cursor-pointer flex items-center justify-center gap-1.5"
+								>
+									<span>Ulangi Post-Test (Sisa 1x)</span>
+									<span class="material-symbols-outlined text-sm">refresh</span>
+								</button>
+							{:else}
+								<button
+									type="button"
+									onclick={() => {
+										showComparisonModal = false;
+										currentStep = 4;
+									}}
+									class="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-black shadow-lg shadow-emerald-600/30 transition-all cursor-pointer flex items-center justify-center gap-1.5"
+								>
+									<span>Lanjut ke Evaluasi</span>
+									<span class="material-symbols-outlined text-sm">arrow_forward</span>
+								</button>
+							{/if}
 						{/if}
 					</div>
 				</div>
@@ -971,79 +1165,85 @@
 				</p>
 			</div>
 
-			<!-- Banner jika peserta sudah memiliki sertifikat aktif -->
-			{#if hasActiveCertificate}
-				<div class="p-4 rounded-2xl bg-gradient-to-r from-emerald-500/10 via-indigo-500/10 to-teal-500/10 border border-emerald-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-					<div class="flex items-center gap-3">
-						<span class="material-symbols-outlined text-emerald-600 dark:text-emerald-400 text-3xl shrink-0">verified</span>
-						<div>
-							<h4 class="font-bold text-xs sm:text-sm text-slate-900 dark:text-white flex items-center gap-2">
-								<span>E-Sertifikat Anda Sedang Aktif</span>
-								<span class="px-2 py-0.5 rounded-full text-[10px] font-black uppercase bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
-									#{activeCert?.certificateNumber || 'AKTIF'}
-								</span>
-							</h4>
-							<p class="text-[11px] text-slate-600 dark:text-slate-300 mt-0.5">
-								Berlaku hingga <strong>{activeCert?.validUntil || '1 Tahun'}</strong>. Evaluasi kepuasan ini bersifat <strong>opsional</strong>. Anda dapat langsung membuka sertifikat aktif atau memperbarui masukan.
-							</p>
+			{#if isEvaluationSubmitted}
+				<!-- Evaluasi Terkunci Permanen -->
+				<div class="p-8 rounded-3xl bg-emerald-50/60 dark:bg-emerald-950/20 border border-emerald-300 dark:border-emerald-800/60 text-center space-y-4">
+					<div class="w-16 h-16 rounded-2xl bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 flex items-center justify-center mx-auto">
+						<span class="material-symbols-outlined text-3xl">task_alt</span>
+					</div>
+					<div class="max-w-md mx-auto space-y-2">
+						<h3 class="text-lg font-black text-slate-900 dark:text-white">
+							Evaluasi Pelatihan Telah Berhasil Disubmit
+						</h3>
+						<p class="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+							Terima kasih atas penilaian dan masukan yang Anda berikan. Formulir evaluasi Kirkpatrick Level 1 ini telah tersimpan secara permanen dan tidak dapat diisi ulang untuk materi pelatihan yang sama.
+						</p>
+					</div>
+					<div class="pt-2 flex flex-wrap items-center justify-center gap-3">
+						<button
+							type="button"
+							onclick={() => (currentStep = 2)}
+							class="px-5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-800 flex items-center gap-1.5 cursor-pointer"
+						>
+							<span class="material-symbols-outlined text-sm">menu_book</span>
+							<span>Tinjau Materi Pembelajaran</span>
+						</button>
+						<button
+							type="button"
+							onclick={() => (currentStep = 5)}
+							class="px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-black flex items-center gap-1.5 cursor-pointer shadow-md"
+						>
+							<span class="material-symbols-outlined text-sm">workspace_premium</span>
+							<span>Lihat E-Sertifikat Resmi</span>
+						</button>
+					</div>
+				</div>
+			{:else}
+				<!-- Live Completion Counter & Preset Tools -->
+				<div class="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-800 space-y-3">
+					<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+						<div class="flex items-center gap-2">
+							<span class="material-symbols-outlined text-base {isEvaluationComplete ? 'text-emerald-500' : 'text-indigo-500'}">
+								{isEvaluationComplete ? 'check_circle' : 'pending_actions'}
+							</span>
+							<span class="font-black text-slate-900 dark:text-white">Status Kelengkapan Evaluasi:</span>
+							<span class="font-mono font-bold {isEvaluationComplete ? 'text-emerald-600 dark:text-emerald-400' : 'text-indigo-600 dark:text-indigo-400'}">
+								{totalAnsweredCount} dari 18 Butir Terisi ({completionPercent}%)
+							</span>
+						</div>
+
+						<div class="flex items-center gap-2">
+							<span class="text-[10px] font-bold text-slate-500">Pintasan Cepat:</span>
+							<button
+								type="button"
+								onclick={() => setAllLikertScore(5)}
+								class="px-2.5 py-1 rounded-xl bg-white dark:bg-slate-900 border border-emerald-300 dark:border-emerald-700 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 text-[11px] font-bold transition-all cursor-pointer shadow-2xs"
+							>
+								Setel Semua Skor 5 (Sangat Baik)
+							</button>
+							<button
+								type="button"
+								onclick={() => setAllLikertScore(4)}
+								class="px-2.5 py-1 rounded-xl bg-white dark:bg-slate-900 border border-indigo-300 dark:border-indigo-700 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 text-[11px] font-bold transition-all cursor-pointer shadow-2xs"
+							>
+								Setel Semua Skor 4 (Baik)
+							</button>
 						</div>
 					</div>
-					<button
-						type="button"
-						onclick={() => (currentStep = 5)}
-						class="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-all shadow cursor-pointer flex items-center gap-1.5 shrink-0 self-start sm:self-auto"
-					>
-						<span>Langsung ke Sertifikat</span>
-						<span class="material-symbols-outlined text-base">arrow_forward</span>
-					</button>
-				</div>
-			{/if}
 
-			<!-- Live Completion Counter & Preset Tools -->
-			<div class="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-800 space-y-3">
-				<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
-					<div class="flex items-center gap-2">
-						<span class="material-symbols-outlined text-base {isEvaluationComplete ? 'text-emerald-500' : 'text-indigo-500'}">
-							{isEvaluationComplete ? 'check_circle' : 'pending_actions'}
-						</span>
-						<span class="font-black text-slate-900 dark:text-white">Status Kelengkapan Evaluasi:</span>
-						<span class="font-mono font-bold {isEvaluationComplete ? 'text-emerald-600 dark:text-emerald-400' : 'text-indigo-600 dark:text-indigo-400'}">
-							{totalAnsweredCount} dari 18 Butir Terisi ({completionPercent}%)
-						</span>
-					</div>
-
-					<div class="flex items-center gap-2">
-						<span class="text-[10px] font-bold text-slate-500">Pintasan Cepat:</span>
-						<button
-							type="button"
-							onclick={() => setAllLikertScore(5)}
-							class="px-2.5 py-1 rounded-xl bg-white dark:bg-slate-900 border border-emerald-300 dark:border-emerald-700 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 text-[11px] font-bold transition-all cursor-pointer shadow-2xs"
-						>
-							Setel Semua Skor 5 (Sangat Baik)
-						</button>
-						<button
-							type="button"
-							onclick={() => setAllLikertScore(4)}
-							class="px-2.5 py-1 rounded-xl bg-white dark:bg-slate-900 border border-indigo-300 dark:border-indigo-700 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 text-[11px] font-bold transition-all cursor-pointer shadow-2xs"
-						>
-							Setel Semua Skor 4 (Baik)
-						</button>
+					<!-- Visual Progress Bar -->
+					<div class="w-full bg-slate-200 dark:bg-slate-700 h-2.5 rounded-full overflow-hidden">
+						<div
+							class="h-full transition-all duration-300 rounded-full {isEvaluationComplete ? 'bg-gradient-to-r from-emerald-500 to-teal-500' : 'bg-gradient-to-r from-indigo-500 to-purple-500'}"
+							style="width: {completionPercent}%"
+						></div>
 					</div>
 				</div>
 
-				<!-- Visual Progress Bar -->
-				<div class="w-full bg-slate-200 dark:bg-slate-700 h-2.5 rounded-full overflow-hidden">
-					<div
-						class="h-full transition-all duration-300 rounded-full {isEvaluationComplete ? 'bg-gradient-to-r from-emerald-500 to-teal-500' : 'bg-gradient-to-r from-indigo-500 to-purple-500'}"
-						style="width: {completionPercent}%"
-					></div>
-				</div>
-			</div>
-
-			<form
-				method="POST"
-				action="?/submitEvaluationL1"
-				use:enhance={() => {
+				<form
+					method="POST"
+					action="?/submitEvaluationL1"
+					use:enhance={() => {
 					isSubmitting = true;
 					return async ({ update }) => {
 						await update();
@@ -1317,6 +1517,7 @@
 					</button>
 				</div>
 			</form>
+			{/if}
 		</div>
 
 	<!-- ════════════════════════════════════════════════════════════════════════ -->
@@ -1433,5 +1634,6 @@
 				</a>
 			</div>
 		</div>
+	{/if}
 	{/if}
 </div>

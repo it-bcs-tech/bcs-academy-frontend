@@ -1,7 +1,8 @@
 import { redirect } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
 import sql from '$lib/server/db';
-import type { Course, Certificate } from '$lib/types/academy';
+import type { Course, Certificate, Enrollment } from '$lib/types/academy';
+import { evaluateCourseSchedule } from '$lib/utils/schedule';
 
 export const load: PageServerLoad = async ({ parent }) => {
 	const { user } = await parent();
@@ -79,13 +80,38 @@ export const load: PageServerLoad = async ({ parent }) => {
 			}));
 		}
 
-		// 3. Ambil penugasan kursus / enrollments resmi milik user dari PostgreSQL
+		// 3. Ambil jadwal sesi pelatihan resmi milik user dari PostgreSQL (hris.lms_session_attendances + hris.lms_sessions)
+		const userPayrollId = user.payrollId.toUpperCase().trim();
+		let userSessions: any[] = [];
+		try {
+			userSessions = await sql`
+				SELECT 
+					s.id as session_id,
+					s.course_id,
+					s.title as session_title,
+					s.session_date,
+					s.start_time,
+					s.end_time,
+					s.session_type,
+					s.location_or_link,
+					s.trainer,
+					s.status as session_status
+				FROM hris.lms_session_attendances a
+				JOIN hris.lms_sessions s ON s.id = a.session_id
+				WHERE UPPER(TRIM(a.payroll_id)) = ${userPayrollId}
+				ORDER BY s.session_date DESC, s.start_time DESC;
+			`;
+		} catch (sessErr) {
+			console.error('Error loading sessions for user:', sessErr);
+		}
+
+		// 4. Ambil penugasan kursus / enrollments resmi milik user dari PostgreSQL
 		const enrollRows = await sql`
 			SELECT e.*, c.title as course_title, c.category as course_category, c.level as course_level,
 			       c.duration_hours, c.modules_count, c.instructor, c.description, c.thumbnail_url
 			FROM hris.lms_enrollments e
 			JOIN hris.lms_courses c ON c.id = e.course_id
-			WHERE UPPER(TRIM(e.payroll_id)) = ${user.payrollId.toUpperCase().trim()}
+			WHERE UPPER(TRIM(e.payroll_id)) = ${userPayrollId}
 			ORDER BY e.is_tna_gap DESC, e.enrolled_at DESC;
 		`;
 
@@ -106,9 +132,16 @@ export const load: PageServerLoad = async ({ parent }) => {
 					modules: []
 				};
 
+				// Evaluasi jadwal khusus kursus ini untuk user
+				const matchedSession = userSessions.find((s: any) => s.course_id === r.course_id) || null;
+				const schedule = evaluateCourseSchedule(matchedSession, r.status);
+
 				return {
 					courseId: r.course_id,
-					course: foundCourse,
+					course: {
+						...foundCourse,
+						schedule
+					},
 					status: (r.status === 'COMPLETED' ? 'COMPLETED' : 'IN_PROGRESS') as 'COMPLETED' | 'IN_PROGRESS',
 					progressPercent: Number(r.progress_percent || 0),
 					completedModulesCount: Number(r.completed_modules_count || 0),
@@ -117,13 +150,27 @@ export const load: PageServerLoad = async ({ parent }) => {
 					completedAt: r.completed_at ? r.completed_at.toISOString().split('T')[0] : undefined,
 					deadline: r.deadline ? r.deadline.toISOString().split('T')[0] : '30 Hari ke depan',
 					score: r.post_test_score ? Number(r.post_test_score) : undefined,
+					postTestScore: r.post_test_score ? Number(r.post_test_score) : undefined,
+					postTestAttempts: Number(r.post_test_attempts || 0),
 					hasCertificate: Boolean(r.has_certificate),
 					certificateNumber: r.certificate_number,
 					isTnaGap: Boolean(r.is_tna_gap),
-					competencyCode: r.competency_code
+					competencyCode: r.competency_code,
+					schedule
 				};
 			});
 		}
+
+		// Update katalog dengan jadwal kursus jika ada
+		catalog = catalog.map((c) => {
+			const matchedSession = userSessions.find((s: any) => s.course_id === c.id) || null;
+			const matchedEnroll = enrollments.find((e) => e.courseId === c.id);
+			const schedule = evaluateCourseSchedule(matchedSession, matchedEnroll?.status);
+			return {
+				...c,
+				schedule
+			};
+		});
 	} catch (e) {
 		console.error('Error loading live DB data for employee dashboard:', e);
 	}

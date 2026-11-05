@@ -3,6 +3,8 @@
  * ══════════════════════════════════════════════════════════════════════
  */
 
+import type { CourseScheduleState } from '$lib/utils/schedule';
+
 export interface EmployeeUser {
 	id: number;
 	payrollId: string;
@@ -57,6 +59,7 @@ export interface Course {
 	thumbnailUrl?: string;
 	passingGrade?: number;
 	modules: CourseModule[];
+	schedule?: CourseScheduleState;
 }
 
 export interface Enrollment {
@@ -71,6 +74,7 @@ export interface Enrollment {
 	totalModulesCount: number;
 	preTestScore?: number;
 	postTestScore?: number;
+	postTestAttempts?: number;
 	enrolledAt: string;
 	completedAt?: string;
 	deadline?: string;
@@ -79,6 +83,7 @@ export interface Enrollment {
 	certificateNumber?: string;
 	isTnaGap?: boolean;
 	competencyCode?: string;
+	schedule?: CourseScheduleState;
 }
 
 export interface Certificate {

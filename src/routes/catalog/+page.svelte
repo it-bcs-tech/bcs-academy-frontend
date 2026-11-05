@@ -103,11 +103,31 @@
 			{#each filteredCatalog as course}
 				<div class="bg-white dark:bg-slate-900/90 border border-slate-200/80 dark:border-slate-800 rounded-3xl p-6 shadow-sm hover:border-slate-300 dark:hover:border-slate-700 hover:shadow-lg transition-all duration-200 group flex flex-col justify-between">
 					<div>
-						<!-- Header Tag & Rating -->
-						<div class="flex items-center justify-between mb-3">
-							<span class="px-2.5 py-1 rounded-xl text-[10px] font-black uppercase tracking-wider {course.category === 'Operations' ? 'bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-950 dark:text-blue-300 dark:border-blue-800/40' : course.category === 'QHSE & Safety' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950 dark:text-emerald-300 dark:border-emerald-800/40' : 'bg-purple-50 text-purple-700 border border-purple-200 dark:bg-purple-950 dark:text-purple-300 dark:border-purple-800/40'}">
-								{course.category}
-							</span>
+						<!-- Header Tag & Rating & Schedule Status -->
+						<div class="flex items-center justify-between mb-3 flex-wrap gap-1.5">
+							<div class="flex items-center gap-1.5">
+								<span class="px-2.5 py-1 rounded-xl text-[10px] font-black uppercase tracking-wider {course.category === 'Operations' ? 'bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-950 dark:text-blue-300 dark:border-blue-800/40' : course.category === 'QHSE & Safety' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950 dark:text-emerald-300 dark:border-emerald-800/40' : 'bg-purple-50 text-purple-700 border border-purple-200 dark:bg-purple-950 dark:text-purple-300 dark:border-purple-800/40'}">
+									{course.category}
+								</span>
+								{#if course.schedule?.hasSchedule}
+									{#if course.schedule.isStarted}
+										<span class="px-2 py-0.5 rounded-lg text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 flex items-center gap-1">
+											<span class="material-symbols-outlined text-[11px]">play_circle</span>
+											<span>Sesi Berlangsung</span>
+										</span>
+									{:else}
+										<span class="px-2 py-0.5 rounded-lg text-[10px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 flex items-center gap-1">
+											<span class="material-symbols-outlined text-[11px]">timer</span>
+											<span>{course.schedule.countdownText}</span>
+										</span>
+									{/if}
+								{:else}
+									<span class="px-2 py-0.5 rounded-lg text-[10px] font-bold bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 flex items-center gap-1">
+										<span class="material-symbols-outlined text-[11px]">hourglass_empty</span>
+										<span>Menunggu Jadwal</span>
+									</span>
+								{/if}
+							</div>
 							<span class="inline-flex items-center gap-1 text-[11px] font-bold text-amber-500 dark:text-amber-400">
 								<span class="material-symbols-outlined text-sm fill">star</span>
 								{course.rating}
@@ -146,13 +166,25 @@
 							<span class="text-[11px] font-bold text-slate-700 dark:text-slate-300 truncate max-w-[120px]">{course.instructor}</span>
 						</div>
 
-						<a 
-							href="/courses/{course.id}" 
-							class="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1 shadow-sm active:scale-95"
-						>
-							<span>Buka Materi</span>
-							<span class="material-symbols-outlined text-sm">play_arrow</span>
-						</a>
+						{#if course.schedule?.isLocked}
+							<button 
+								type="button" 
+								disabled 
+								class="bg-slate-100 dark:bg-slate-800/80 text-slate-400 dark:text-slate-500 px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1 cursor-not-allowed border border-slate-200/80 dark:border-slate-700/80"
+								title={course.schedule?.statusMessage || 'Menunggu Jadwal'}
+							>
+								<span class="material-symbols-outlined text-sm">lock</span>
+								<span>{course.schedule?.hasSchedule ? course.schedule.countdownText : 'Menunggu Jadwal'}</span>
+							</button>
+						{:else}
+							<a 
+								href="/courses/{course.id}" 
+								class="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1 shadow-sm active:scale-95"
+							>
+								<span>Buka Materi</span>
+								<span class="material-symbols-outlined text-sm">play_arrow</span>
+							</a>
+						{/if}
 					</div>
 				</div>
 			{/each}
