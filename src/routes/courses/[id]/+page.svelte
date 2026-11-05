@@ -63,8 +63,8 @@
 	let isCurrentModulePdf = $derived(isModulePdf(currentModule));
 
 	// State Jawaban & Evaluasi
-	let preAnswers = $state<Record<number, string>>({});
-	let postAnswers = $state<Record<number, string>>({});
+	let preAnswers = $state<Record<string | number, string>>((data.enrollment?.preTestAnswers as Record<string, string>) || {});
+	let postAnswers = $state<Record<string | number, string>>((data.enrollment?.postTestAnswers as Record<string, string>) || {});
 	let isSubmitting = $state(false);
 
 	// ══════════════════════════════════════════════════════════════
@@ -168,8 +168,13 @@
 			? true
 			: Boolean(data.isEvaluationSubmitted)
 	);
+	let hasEssayPending = $derived(
+		form?.actionType === 'POST_TEST' && typeof form.hasEssayPending === 'boolean'
+			? form.hasEssayPending
+			: Boolean(data.enrollment?.hasEssayPending)
+	);
 	let isCompletedFinal = $derived(
-		Boolean(data.isCompletedFinal) || Boolean(activeCert) || isEvaluationSubmitted || data.enrollment?.status === 'COMPLETED'
+		Boolean(data.isCompletedFinal) || Boolean(activeCert) || (isEvaluationSubmitted && !hasEssayPending) || data.enrollment?.status === 'COMPLETED'
 	);
 
 	let preScoreVal = $derived(
@@ -193,7 +198,7 @@
 	let isTestPassed = $derived(
 		form?.actionType === 'POST_TEST' && typeof form.isPassed === 'boolean'
 			? form.isPassed
-			: postScoreVal >= coursePassingGrade
+			: (!hasEssayPending && postScoreVal >= coursePassingGrade)
 	);
 
 	let scoreDelta = $derived(postScoreVal - preScoreVal);
@@ -211,8 +216,18 @@
 				showComparisonModal = true;
 				isPostTestSubmitted = true;
 				isRetryingPostTest = false;
+				if (form.postTestAnswers) {
+					postAnswers = { ...postAnswers, ...form.postTestAnswers };
+				}
 				if (form.hasActiveCert && activeCert) {
 					activeCert.score = Math.max(Number(activeCert.score) || 0, form.score);
+				}
+			} else if (form.actionType === 'PRE_TEST') {
+				if (form.preTestAnswers) {
+					preAnswers = { ...preAnswers, ...form.preTestAnswers };
+				}
+				if (form.step) {
+					currentStep = form.step as 1 | 2 | 3 | 4 | 5;
 				}
 			} else if (form.success) {
 				if (form.step) {
@@ -483,33 +498,63 @@
 				>
 					<div class="space-y-5">
 						{#each preTestQuestions as q, idx}
+							{@const isEssay = q.questionType === 'ESSAY' || !q.options || q.options.length === 0}
+							{@const ansText = preAnswers[q.id] || ''}
 							<div class="p-5 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-800 space-y-3">
-								<div class="flex items-start gap-3">
-									<span class="w-6 h-6 rounded-lg bg-indigo-600 text-white text-xs font-black flex items-center justify-center shrink-0">
-										{idx + 1}
+								<div class="flex items-start justify-between gap-3">
+									<div class="flex items-start gap-3">
+										<span class="w-6 h-6 rounded-lg bg-indigo-600 text-white text-xs font-black flex items-center justify-center shrink-0">
+											{idx + 1}
+										</span>
+										<p class="text-xs sm:text-sm font-bold text-slate-900 dark:text-white leading-relaxed">
+											{q.questionText}
+										</p>
+									</div>
+									<span class="text-[10px] font-bold px-2.5 py-0.5 rounded-full shrink-0 {isEssay ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/80 dark:text-amber-300 border border-amber-300 dark:border-amber-800' : 'bg-indigo-50 text-indigo-700 dark:bg-indigo-950/80 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800'}">
+										{isEssay ? 'Uraian / Essay' : 'Pilihan Ganda'}
 									</span>
-									<p class="text-xs sm:text-sm font-bold text-slate-900 dark:text-white leading-relaxed">
-										{q.questionText}
-									</p>
 								</div>
 
-								<div class="space-y-2 pl-9">
-									{#each q.options as opt}
-										<label class="flex items-center gap-3 p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 hover:border-indigo-400 dark:hover:border-indigo-500 transition-all cursor-pointer">
-											<input
-												type="radio"
-												name="pre_{q.id}"
-												value={opt.key}
-												bind:group={preAnswers[q.id]}
-												required
-												class="w-4 h-4 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
-											/>
-											<span class="text-xs text-slate-800 dark:text-slate-200 font-medium">
-												<strong class="font-bold text-indigo-600 dark:text-indigo-400">{opt.key}.</strong> {opt.text}
+								{#if isEssay}
+									<div class="space-y-2 pl-9">
+										<textarea
+											name="pre_{q.id}"
+											bind:value={preAnswers[q.id]}
+											rows="4"
+											minlength="10"
+											required
+											placeholder="Tuliskan jawaban uraian Anda di sini secara lengkap (minimal 10 karakter)..."
+											class="w-full p-3.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 text-xs sm:text-sm text-slate-900 dark:text-white placeholder-slate-400 transition-all outline-none resize-y min-h-[100px]"
+										></textarea>
+										<div class="flex items-center justify-between text-[11px] text-slate-400">
+											<span class="flex items-center gap-1">
+												<span class="material-symbols-outlined text-xs text-amber-500">info</span>
+												Jawaban tersimpan untuk evaluasi baseline pemahaman Anda.
 											</span>
-										</label>
-									{/each}
-								</div>
+											<span class="font-medium {ansText.trim().length < 10 ? 'text-amber-500' : 'text-emerald-500'}">
+												{ansText.trim().length} / min. 10 karakter
+											</span>
+										</div>
+									</div>
+								{:else}
+									<div class="space-y-2 pl-9">
+										{#each q.options as opt}
+											<label class="flex items-center gap-3 p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 hover:border-indigo-400 dark:hover:border-indigo-500 transition-all cursor-pointer">
+												<input
+													type="radio"
+													name="pre_{q.id}"
+													value={opt.key}
+													bind:group={preAnswers[q.id]}
+													required
+													class="w-4 h-4 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+												/>
+												<span class="text-xs text-slate-800 dark:text-slate-200 font-medium">
+													<strong class="font-bold text-indigo-600 dark:text-indigo-400">{opt.key}.</strong> {opt.text}
+												</span>
+											</label>
+										{/each}
+									</div>
+								{/if}
 							</div>
 						{/each}
 					</div>
@@ -895,34 +940,65 @@
 				>
 					<div class="space-y-5">
 						{#each postTestQuestions as q, idx}
+							{@const isEssay = q.questionType === 'ESSAY' || !q.options || q.options.length === 0}
+							{@const ansText = postAnswers[q.id] || ''}
 							<div class="p-5 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-800 space-y-3">
-								<div class="flex items-start gap-3">
-									<span class="w-6 h-6 rounded-lg bg-amber-600 text-white text-xs font-black flex items-center justify-center shrink-0">
-										{idx + 1}
+								<div class="flex items-start justify-between gap-3">
+									<div class="flex items-start gap-3">
+										<span class="w-6 h-6 rounded-lg bg-amber-600 text-white text-xs font-black flex items-center justify-center shrink-0">
+											{idx + 1}
+										</span>
+										<p class="text-xs sm:text-sm font-bold text-slate-900 dark:text-white leading-relaxed">
+											{q.questionText}
+										</p>
+									</div>
+									<span class="text-[10px] font-bold px-2.5 py-0.5 rounded-full shrink-0 {isEssay ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/80 dark:text-amber-300 border border-amber-300 dark:border-amber-800' : 'bg-amber-50 text-amber-700 dark:bg-amber-950/80 dark:text-amber-300 border border-amber-200 dark:border-amber-800'}">
+										{isEssay ? 'Uraian / Essay' : 'Pilihan Ganda'}
 									</span>
-									<p class="text-xs sm:text-sm font-bold text-slate-900 dark:text-white leading-relaxed">
-										{q.questionText}
-									</p>
 								</div>
 
-								<div class="space-y-2 pl-9">
-									{#each q.options as opt}
-										<label class="flex items-center gap-3 p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 hover:border-amber-400 dark:hover:border-amber-500 transition-all cursor-pointer">
-											<input
-												type="radio"
-												name="post_{q.id}"
-												value={opt.key}
-												bind:group={postAnswers[q.id]}
-												disabled={isSubmitting}
-												required
-												class="w-4 h-4 text-amber-600 focus:ring-amber-500 cursor-pointer"
-											/>
-											<span class="text-xs text-slate-800 dark:text-slate-200 font-medium">
-												<strong class="font-bold text-amber-600 dark:text-amber-400">{opt.key}.</strong> {opt.text}
+								{#if isEssay}
+									<div class="space-y-2 pl-9">
+										<textarea
+											name="post_{q.id}"
+											bind:value={postAnswers[q.id]}
+											disabled={isSubmitting}
+											rows="4"
+											minlength="10"
+											required
+											placeholder="Tuliskan jawaban evaluasi uraian Anda di sini secara lengkap (minimal 10 karakter)..."
+											class="w-full p-3.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 text-xs sm:text-sm text-slate-900 dark:text-white placeholder-slate-400 transition-all outline-none resize-y min-h-[100px] disabled:opacity-50"
+										></textarea>
+										<div class="flex items-center justify-between text-[11px] text-slate-400">
+											<span class="flex items-center gap-1">
+												<span class="material-symbols-outlined text-xs text-amber-500">rate_review</span>
+												Jawaban essay akan dinilai langsung oleh instruktur / trainer.
 											</span>
-										</label>
-									{/each}
-								</div>
+											<span class="font-medium {ansText.trim().length < 10 ? 'text-amber-500' : 'text-emerald-500'}">
+												{ansText.trim().length} / min. 10 karakter
+											</span>
+										</div>
+									</div>
+								{:else}
+									<div class="space-y-2 pl-9">
+										{#each q.options as opt}
+											<label class="flex items-center gap-3 p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 hover:border-amber-400 dark:hover:border-amber-500 transition-all cursor-pointer">
+												<input
+													type="radio"
+													name="post_{q.id}"
+													value={opt.key}
+													bind:group={postAnswers[q.id]}
+													disabled={isSubmitting}
+													required
+													class="w-4 h-4 text-amber-600 focus:ring-amber-500 cursor-pointer"
+												/>
+												<span class="text-xs text-slate-800 dark:text-slate-200 font-medium">
+													<strong class="font-bold text-amber-600 dark:text-amber-400">{opt.key}.</strong> {opt.text}
+												</span>
+											</label>
+										{/each}
+									</div>
+								{/if}
 							</div>
 						{/each}
 					</div>
@@ -1018,8 +1094,20 @@
 						</span>
 					</div>
 
-					<!-- Status Kelulusan Murni / Apa Adanya -->
-					{#if isTestPassed}
+					<!-- Status Kelulusan Murni / Apa Adanya / Review Essay -->
+					{#if hasEssayPending}
+						<div class="p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800/60 flex items-start gap-3">
+							<span class="material-symbols-outlined text-2xl text-amber-600 dark:text-amber-400 shrink-0 mt-0.5">hourglass_top</span>
+							<div class="space-y-1 text-xs">
+								<div class="font-black text-amber-900 dark:text-amber-200">
+									JAWABAN SOAL ESSAY MENUNGGU PENILAIAN INSTRUKTUR
+								</div>
+								<p class="text-amber-700 dark:text-amber-300 leading-relaxed text-[11px]">
+									Jawaban uraian Anda telah tersimpan dengan aman di database. Nilai pilihan ganda sementara: <strong>{postScoreVal}/100</strong>. Nilai akhir kelulusan dan e-sertifikat akan diproses setelah instruktur/HR selesai meninjau uraian Anda. Silakan lanjut ke pengisian Formulir Evaluasi Pelatihan (Step 4).
+								</p>
+							</div>
+						</div>
+					{:else if isTestPassed}
 						<div class="p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 flex items-start gap-3">
 							<span class="material-symbols-outlined text-2xl text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5">verified</span>
 							<div class="space-y-1 text-xs">
@@ -1049,6 +1137,40 @@
 						</div>
 					{/if}
 
+					<!-- Tinjauan Jawaban Soal Essay Peserta -->
+					{#if postTestQuestions.some((q) => q.questionType === 'ESSAY' || !q.options || q.options.length === 0)}
+						<div class="space-y-3 pt-2">
+							<div class="flex items-center gap-2 text-xs font-black text-slate-800 dark:text-slate-200">
+								<span class="material-symbols-outlined text-base text-amber-500">rate_review</span>
+								<span>Tinjauan Jawaban Uraian (Essay)</span>
+							</div>
+							<div class="space-y-3 max-h-56 overflow-y-auto pr-1">
+								{#each postTestQuestions.filter((q) => q.questionType === 'ESSAY' || !q.options || q.options.length === 0) as eq, eIdx}
+									{@const valAns = postAnswers[eq.id] || (data.enrollment?.postTestAnswers as any)?.[eq.id] || ''}
+									<div class="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 space-y-2 text-xs">
+										<div class="flex items-start justify-between gap-2">
+											<p class="font-bold text-slate-900 dark:text-white">
+												{eq.questionText}
+											</p>
+											<span class="px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border border-amber-300 dark:border-amber-800 shrink-0">
+												Menunggu Review
+											</span>
+										</div>
+										<div class="p-2.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-[11px] text-slate-700 dark:text-slate-300 italic whitespace-pre-wrap">
+											"{valAns || '(Jawaban telah tersimpan di sistem)'}"
+										</div>
+										{#if eq.explanation}
+											<div class="text-[10px] text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
+												<span class="material-symbols-outlined text-xs text-amber-500">info</span>
+												<span>Panduan / Rubrik: {eq.explanation}</span>
+											</div>
+										{/if}
+									</div>
+								{/each}
+							</div>
+						</div>
+					{/if}
+
 					<!-- Tombol Aksi Modal -->
 					<div class="flex flex-col-reverse sm:flex-row items-center justify-end gap-2.5 pt-2 border-t border-slate-200 dark:border-slate-800">
 						<button
@@ -1058,7 +1180,19 @@
 						>
 							Tutup
 						</button>
-						{#if isTestPassed}
+						{#if hasEssayPending}
+							<button
+								type="button"
+								onclick={() => {
+									showComparisonModal = false;
+									currentStep = 4;
+								}}
+								class="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-xs font-black shadow-lg shadow-amber-600/30 transition-all cursor-pointer flex items-center justify-center gap-1.5"
+							>
+								<span>Lanjut ke Evaluasi (Step 4)</span>
+								<span class="material-symbols-outlined text-sm">arrow_forward</span>
+							</button>
+						{:else if isTestPassed}
 							{#if hasActiveCertificate}
 								<button
 									type="button"
@@ -1525,26 +1659,69 @@
 	<!-- ════════════════════════════════════════════════════════════════════════ -->
 	{:else if currentStep === 5}
 		<div class="space-y-6">
-			<!-- Banner Konfirmasi Evaluasi Selesai & Sertifikat Aktif -->
-			<div class="p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-800/60 flex items-start sm:items-center justify-between gap-3">
-				<div class="flex items-center gap-3">
-					<span class="material-symbols-outlined text-2xl text-emerald-600 dark:text-emerald-400 shrink-0">verified</span>
-					<div>
-						<p class="text-xs font-black text-emerald-900 dark:text-emerald-200">
-							E-Sertifikat Digital Resmi Aktif (Nilai: {activeCert?.score || postScoreVal}/100)
-						</p>
-						<p class="text-[11px] text-emerald-700 dark:text-emerald-400 mt-0.5">
-							Sertifikat kompetensi ini berlaku sah selama <strong>1 Tahun</strong> hingga <strong>{activeCert?.validUntil || '1 Tahun Mendatang'}</strong>.
+			{#if hasEssayPending && !activeCert}
+				<div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-8 md:p-12 shadow-xl text-center space-y-6 max-w-2xl mx-auto">
+					<div class="w-20 h-20 rounded-3xl bg-amber-500/10 text-amber-500 dark:text-amber-400 flex items-center justify-center mx-auto">
+						<span class="material-symbols-outlined text-4xl">hourglass_top</span>
+					</div>
+					<div class="space-y-2">
+						<h3 class="text-xl font-black text-slate-900 dark:text-white">
+							E-Sertifikat Menunggu Penilaian Uraian Instruktur
+						</h3>
+						<p class="text-xs sm:text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
+							Anda telah berhasil menyelesaikan seluruh modul pembelajaran dan formulir evaluasi kepuasan. Butir jawaban soal uraian (Essay) Anda saat ini sedang dalam proses peninjauan dan penilaian manual oleh instruktur/HR.
 						</p>
 					</div>
-				</div>
-				<span class="px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-600 text-white shrink-0">
-					Valid 1 Tahun
-				</span>
-			</div>
 
-			<!-- Kartu Sertifikat Resmi PT BCS -->
-			<div class="relative bg-gradient-to-br from-slate-900 via-slate-950 to-indigo-950 border-4 border-amber-500/60 rounded-3xl p-8 md:p-12 text-white shadow-2xl overflow-hidden print:m-0 print:border-2">
+					<div class="p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 text-xs text-amber-800 dark:text-amber-300 space-y-1 text-left">
+						<div class="font-bold flex items-center gap-1.5">
+							<span class="material-symbols-outlined text-sm">info</span>
+							Ketentuan Penerbitan E-Sertifikat:
+						</div>
+						<p class="text-[11px] leading-relaxed">
+							E-sertifikat resmi ber-barcode akan otomatis diterbitkan di halaman ini dan tab <strong>Sertifikat Saya</strong> setelah instruktur menyelesaikan koreksi essay hingga total skor akhir mencapai passing grade ({coursePassingGrade}).
+						</p>
+					</div>
+
+					<div class="pt-2 flex flex-col sm:flex-row items-center justify-center gap-3">
+						<button
+							type="button"
+							onclick={() => (currentStep = 2)}
+							class="w-full sm:w-auto px-6 py-3 rounded-2xl border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all cursor-pointer flex items-center justify-center gap-2"
+						>
+							<span class="material-symbols-outlined text-base">menu_book</span>
+							<span>Tinjau Kembali Materi Modul</span>
+						</button>
+						<a
+							href="/"
+							class="w-full sm:w-auto px-6 py-3 rounded-2xl bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 text-white text-xs font-black shadow-lg shadow-indigo-600/30 transition-all cursor-pointer flex items-center justify-center gap-2"
+						>
+							<span class="material-symbols-outlined text-base">home</span>
+							<span>Kembali ke Beranda</span>
+						</a>
+					</div>
+				</div>
+			{:else}
+				<!-- Banner Konfirmasi Evaluasi Selesai & Sertifikat Aktif -->
+				<div class="p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-800/60 flex items-start sm:items-center justify-between gap-3">
+					<div class="flex items-center gap-3">
+						<span class="material-symbols-outlined text-2xl text-emerald-600 dark:text-emerald-400 shrink-0">verified</span>
+						<div>
+							<p class="text-xs font-black text-emerald-900 dark:text-emerald-200">
+								E-Sertifikat Digital Resmi Aktif (Nilai: {activeCert?.score || postScoreVal}/100)
+							</p>
+							<p class="text-[11px] text-emerald-700 dark:text-emerald-400 mt-0.5">
+								Sertifikat kompetensi ini berlaku sah selama <strong>1 Tahun</strong> hingga <strong>{activeCert?.validUntil || '1 Tahun Mendatang'}</strong>.
+							</p>
+						</div>
+					</div>
+					<span class="px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-600 text-white shrink-0">
+						Valid 1 Tahun
+					</span>
+				</div>
+
+				<!-- Kartu Sertifikat Resmi PT BCS -->
+				<div class="relative bg-gradient-to-br from-slate-900 via-slate-950 to-indigo-950 border-4 border-amber-500/60 rounded-3xl p-8 md:p-12 text-white shadow-2xl overflow-hidden print:m-0 print:border-2">
 				<!-- Background watermark / accent -->
 				<div class="absolute -right-20 -bottom-20 w-80 h-80 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none"></div>
 
@@ -1633,6 +1810,7 @@
 					<span>Kembali ke Beranda</span>
 				</a>
 			</div>
+			{/if}
 		</div>
 	{/if}
 	{/if}

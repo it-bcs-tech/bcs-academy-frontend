@@ -37,6 +37,7 @@ export interface QuizQuestion {
 	courseId?: string;
 	moduleId?: string;
 	quizType: 'PRE_TEST' | 'POST_TEST';
+	questionType?: 'MCQ' | 'ESSAY';
 	questionText: string;
 	options: { key: string; text: string }[];
 	correctKey: string;
@@ -75,6 +76,9 @@ export interface Enrollment {
 	preTestScore?: number;
 	postTestScore?: number;
 	postTestAttempts?: number;
+	preTestAnswers?: Record<string, string>;
+	postTestAnswers?: Record<string, string>;
+	hasEssayPending?: boolean;
 	enrolledAt: string;
 	completedAt?: string;
 	deadline?: string;

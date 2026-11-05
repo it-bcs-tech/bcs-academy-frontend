@@ -88,7 +88,7 @@ export const load: PageServerLoad = async ({ params, parent, cookies }) => {
 
 	try {
 		const qRows = await sql`
-			SELECT id, course_id, quiz_type, question_text, options, correct_key, explanation
+			SELECT id, course_id, quiz_type, question_type, question_text, options, correct_key, explanation
 			FROM hris.lms_quiz_questions
 			WHERE course_id = ${params.id}
 			ORDER BY quiz_type ASC, id ASC;
@@ -96,10 +96,12 @@ export const load: PageServerLoad = async ({ params, parent, cookies }) => {
 
 		for (const q of qRows) {
 			const parsedOptions = typeof q.options === 'string' ? JSON.parse(q.options) : q.options;
+			const qType = q.question_type || (parsedOptions && parsedOptions.length > 0 ? 'MCQ' : 'ESSAY');
 			const item: QuizQuestion = {
 				id: q.id,
 				courseId: q.course_id,
 				quizType: q.quiz_type,
+				questionType: qType,
 				questionText: q.question_text,
 				options: parsedOptions || [],
 				correctKey: q.correct_key,
@@ -222,6 +224,9 @@ export const load: PageServerLoad = async ({ params, parent, cookies }) => {
 		preTestScore: enroll.pre_test_score !== null ? Number(enroll.pre_test_score) : null,
 		postTestScore: enroll.post_test_score !== null ? Number(enroll.post_test_score) : null,
 		postTestAttempts,
+		preTestAnswers: enroll.pre_test_answers || {},
+		postTestAnswers: enroll.post_test_answers || {},
+		hasEssayPending: Boolean(enroll.has_essay_pending),
 		enrolledAt: enroll.enrolled_at ? enroll.enrolled_at.toISOString() : '',
 		completedAt: enroll.completed_at ? enroll.completed_at.toISOString() : '',
 		hasCertificate: Boolean(enroll.has_certificate),
@@ -374,11 +379,11 @@ export const actions = {
 			};
 		}
 
-		// Ambil daftar kunci jawaban pre-test dari DB
+		// Ambil daftar butir soal pre-test dari DB
 		let questions: any[] = [];
 		try {
 			questions = await sql`
-				SELECT id, correct_key FROM hris.lms_quiz_questions
+				SELECT id, question_type, correct_key FROM hris.lms_quiz_questions
 				WHERE course_id = ${courseId} AND quiz_type = 'PRE_TEST'
 				ORDER BY id ASC;
 			`;
@@ -388,19 +393,46 @@ export const actions = {
 
 		let totalQ = questions.length;
 		let correctCount = 0;
+		const answersMap: Record<string, string> = {};
 
 		if (totalQ > 0) {
-			for (const q of questions) {
-				const userAns = formData.get(`pre_${q.id}`)?.toString();
-				if (userAns && userAns.toUpperCase() === q.correct_key.toUpperCase()) {
-					correctCount++;
+			for (let i = 0; i < questions.length; i++) {
+				const q = questions[i];
+				const userAns = formData.get(`pre_${q.id}`)?.toString()?.trim() || '';
+				answersMap[String(q.id)] = userAns;
+
+				const isEssay = q.question_type === 'ESSAY';
+				if (isEssay) {
+					if (userAns.length < 10) {
+						return {
+							success: false,
+							actionType: 'PRE_TEST',
+							message: `Jawaban untuk soal uraian #${i + 1} wajib diisi minimal 10 karakter.`
+						};
+					}
+					// Nilai awal essay 0 sampai dievaluasi
+				} else {
+					if (!userAns) {
+						return {
+							success: false,
+							actionType: 'PRE_TEST',
+							message: `Mohon pilih salah satu jawaban untuk soal pilihan ganda #${i + 1}.`
+						};
+					}
+					if (userAns.toUpperCase() === (q.correct_key || '').toUpperCase()) {
+						correctCount++;
+					}
 				}
 			}
 		} else {
 			// Fallback jika tidak ada soal di DB
 			totalQ = 2;
-			if (formData.get('pre_901') === 'A') correctCount++;
-			if (formData.get('pre_902') === 'A') correctCount++;
+			const a1 = formData.get('pre_901')?.toString()?.trim() || '';
+			const a2 = formData.get('pre_902')?.toString()?.trim() || '';
+			answersMap['901'] = a1;
+			answersMap['902'] = a2;
+			if (a1 === 'A') correctCount++;
+			if (a2 === 'A') correctCount++;
 		}
 
 		const score = Math.round((correctCount / Math.max(1, totalQ)) * 100);
@@ -410,6 +442,7 @@ export const actions = {
 				UPDATE hris.lms_enrollments
 				SET 
 					pre_test_score = ${score},
+					pre_test_answers = ${JSON.stringify(answersMap)}::jsonb,
 					progress_percent = GREATEST(COALESCE(progress_percent, 0), 15),
 					status = CASE WHEN status = 'COMPLETED' THEN 'COMPLETED' ELSE 'IN_PROGRESS' END
 				WHERE course_id = ${courseId} AND UPPER(TRIM(payroll_id)) = ${payrollId};
@@ -420,6 +453,7 @@ export const actions = {
 				actionType: 'PRE_TEST',
 				score,
 				step: 2,
+				preTestAnswers: answersMap,
 				message: `Pre-Test berhasil dikumpulkan! Nilai baseline Anda: ${score}/100. Silakan lanjutkan mempelajari materi modul.`
 			};
 		} catch (err: any) {
@@ -520,7 +554,7 @@ export const actions = {
 		let questions: any[] = [];
 		try {
 			questions = await sql`
-				SELECT id, correct_key FROM hris.lms_quiz_questions
+				SELECT id, question_type, correct_key FROM hris.lms_quiz_questions
 				WHERE course_id = ${courseId} AND quiz_type = 'POST_TEST'
 				ORDER BY id ASC;
 			`;
@@ -530,19 +564,50 @@ export const actions = {
 
 		let totalQ = questions.length;
 		let correctCount = 0;
+		let hasEssay = false;
+		const answersMap: Record<string, string> = {};
 
 		if (totalQ > 0) {
-			for (const q of questions) {
-				const userAns = formData.get(`post_${q.id}`)?.toString();
-				if (userAns && userAns.toUpperCase() === q.correct_key.toUpperCase()) {
-					correctCount++;
+			for (let i = 0; i < questions.length; i++) {
+				const q = questions[i];
+				const userAns = formData.get(`post_${q.id}`)?.toString()?.trim() || '';
+				answersMap[String(q.id)] = userAns;
+
+				const isEssay = q.question_type === 'ESSAY';
+				if (isEssay) {
+					hasEssay = true;
+					if (userAns.length < 10) {
+						return {
+							success: false,
+							actionType: 'POST_TEST',
+							message: `Jawaban untuk soal uraian #${i + 1} wajib diisi minimal 10 karakter.`
+						};
+					}
+					// Nilai awal essay 0 sampai dievaluasi oleh instruktur
+				} else {
+					if (!userAns) {
+						return {
+							success: false,
+							actionType: 'POST_TEST',
+							message: `Mohon pilih salah satu jawaban untuk soal pilihan ganda #${i + 1}.`
+						};
+					}
+					if (userAns.toUpperCase() === (q.correct_key || '').toUpperCase()) {
+						correctCount++;
+					}
 				}
 			}
 		} else {
 			totalQ = 3;
-			if (formData.get('post_911') === 'A') correctCount++;
-			if (formData.get('post_912') === 'A') correctCount++;
-			if (formData.get('post_913') === 'A') correctCount++;
+			const a1 = formData.get('post_911')?.toString()?.trim() || '';
+			const a2 = formData.get('post_912')?.toString()?.trim() || '';
+			const a3 = formData.get('post_913')?.toString()?.trim() || '';
+			answersMap['911'] = a1;
+			answersMap['912'] = a2;
+			answersMap['913'] = a3;
+			if (a1 === 'A') correctCount++;
+			if (a2 === 'A') correctCount++;
+			if (a3 === 'A') correctCount++;
 		}
 
 		const score = Math.round((correctCount / Math.max(1, totalQ)) * 100);
@@ -563,7 +628,7 @@ export const actions = {
 			console.error('Error fetching course/enrollment metadata in submitPostTest:', e);
 		}
 
-		const isPassed = score >= passingGrade;
+		const isPassed = !hasEssay && score >= passingGrade;
 
 		// Cek apakah karyawan sudah memiliki sertifikat aktif untuk kursus ini
 		let hasActiveCert = false;
@@ -602,12 +667,14 @@ export const actions = {
 				SET 
 					post_test_attempts = ${newAttempts},
 					post_test_score = GREATEST(COALESCE(post_test_score, 0), ${score}),
+					post_test_answers = ${JSON.stringify(answersMap)}::jsonb,
+					has_essay_pending = ${hasEssay},
 					progress_percent = ${isPassed ? 100 : (hasActiveCert ? 100 : 70)},
 					certificate_number = COALESCE(certificate_number, ${activeCertNumber || null})
 				WHERE course_id = ${courseId} AND UPPER(TRIM(payroll_id)) = ${payrollId};
 			`;
 
-			const canRetry = newAttempts < 2 && !isPassed;
+			const canRetry = !hasEssay && newAttempts < 2 && !isPassed;
 			const remainingAttempts = Math.max(0, 2 - newAttempts);
 
 			return {
@@ -625,14 +692,18 @@ export const actions = {
 				postTestAttempts: newAttempts,
 				remainingAttempts,
 				canRetry,
-				step: isPassed || newAttempts >= 2 ? 4 : 3,
-				message: isPassed
-					? (hasActiveCert
-						? `Selamat! Anda Lulus Post-Test dengan Nilai ${score}/100. Sertifikat resmi Anda (#${activeCertNumber}) tetap aktif dan nilainya diperbarui.`
-						: `Selamat! Anda Lulus Post-Test dengan Nilai ${score}/100 (Passing Grade: ${passingGrade}).`)
-					: (canRetry
-						? `Nilai Anda ${score}/100 (Passing Grade: ${passingGrade}). Anda masih memiliki 1x kesempatan remedial. Anda dapat meninjau materi kembali di Bab Belajar sebelum mencoba lagi.`
-						: `Nilai Anda ${score}/100. Batas 2 kali percobaan telah selesai digunakan. Silakan lanjutkan ke pengisian evaluasi pelatihan.`)
+				hasEssayPending: hasEssay,
+				postTestAnswers: answersMap,
+				step: 4,
+				message: hasEssay
+					? `Post-Test berhasil dikumpulkan! Jawaban soal essay Anda telah tersimpan dan sedang menunggu penilaian manual oleh instruktur/HR. Nilai pilihan ganda sementara: ${score}/100. Silakan lanjutkan mengisi form Evaluasi Pelatihan.`
+					: (isPassed
+						? (hasActiveCert
+							? `Selamat! Anda Lulus Post-Test dengan Nilai ${score}/100. Sertifikat resmi Anda (#${activeCertNumber}) tetap aktif dan nilainya diperbarui.`
+							: `Selamat! Anda Lulus Post-Test dengan Nilai ${score}/100 (Passing Grade: ${passingGrade}).`)
+						: (canRetry
+							? `Nilai Anda ${score}/100 (Passing Grade: ${passingGrade}). Anda masih memiliki 1x kesempatan remedial. Anda dapat meninjau materi kembali di Bab Belajar sebelum mencoba lagi.`
+							: `Nilai Anda ${score}/100. Batas 2 kali percobaan telah selesai digunakan. Silakan lanjutkan ke pengisian evaluasi pelatihan.`))
 			};
 		} catch (err: any) {
 			return {
